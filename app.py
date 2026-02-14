@@ -1,16 +1,71 @@
 """
-ChannelPRO — Partner Revenue Optimizer
-=======================================
-Client Intake → Step 1 (Scoring Criteria) → Step 2 (Score a Partner) → Step 3 (Partner Assessment)
+ChannelPRO — Partner Revenue Optimizer (Multi-Tenant)
+=====================================================
+Login → Client Intake → Step 1–4
+Single instance, per-client data isolation, admin overview.
 Run:  streamlit run app.py
 """
-import csv, io, json, pathlib, re
+import csv, hashlib, io, json, os, pathlib, re, secrets
 import streamlit as st
+
+# ═════════════════════════════════════════════════════════════════════════
+# DATA & AUTH PATHS
+# ═════════════════════════════════════════════════════════════════════════
+BASE_DIR = pathlib.Path(os.environ.get("RENDER_DISK_PATH", "."))
+BASE_DIR.mkdir(parents=True, exist_ok=True)
+USERS_FILE = BASE_DIR / "users.json"
+TENANTS_DIR = BASE_DIR / "tenants"
+TENANTS_DIR.mkdir(parents=True, exist_ok=True)
 
 YORK_LOGO_B64 = "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"
 
 # ═════════════════════════════════════════════════════════════════════════
-# 1. METRICS
+# AUTH HELPERS
+# ═════════════════════════════════════════════════════════════════════════
+def _hash_pw(pw):
+    salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 200_000)
+    return f"{salt}:{h.hex()}"
+
+def _verify_pw(pw, stored):
+    try:
+        salt, h = stored.split(":")
+        return hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 200_000).hex() == h
+    except Exception:
+        return False
+
+def _load_users():
+    if USERS_FILE.exists():
+        try: return json.loads(USERS_FILE.read_text())
+        except Exception: pass
+    # Create default admin on first run
+    default = {"admin": {"password_hash": _hash_pw("admin"), "display_name": "Administrator",
+                         "role": "admin", "tenant": None}}
+    _save_users(default)
+    return default
+
+def _save_users(users):
+    USERS_FILE.write_text(json.dumps(users, indent=2))
+
+def _tenant_dir(tenant_id):
+    d = TENANTS_DIR / tenant_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def _all_tenants():
+    """List all tenant IDs that have data."""
+    if not TENANTS_DIR.exists(): return []
+    return sorted([d.name for d in TENANTS_DIR.iterdir() if d.is_dir()])
+
+def _current_data_dir():
+    """Return the data directory for the currently active tenant."""
+    tid = st.session_state.get("active_tenant")
+    if not tid: return BASE_DIR  # fallback
+    return _tenant_dir(tid)
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# METRICS
 # ═════════════════════════════════════════════════════════════════════════
 SCORECARD_METRICS = [
     {"id":1,"key":"annual_revenues","name":"Annual revenues for vendor","explanation":"Total amount received from the partner, net of discounts/margins.","type":"quantitative","unit":"$","direction":"higher_is_better","cat":"Revenue & Growth","defaults":{"1":{"min":"0","max":"50000"},"2":{"min":"50001","max":"150000"},"3":{"min":"150001","max":"350000"},"4":{"min":"350001","max":"750000"},"5":{"min":"750001","max":""}}},
@@ -42,7 +97,6 @@ SCORECARD_METRICS = [
     {"id":27,"key":"export_control_ip","name":"Export control & IP protection","explanation":"Complying with provisions?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Known violations","2":"Gaps; no remediation","3":"Generally compliant","4":"Fully compliant; proactive","5":"Best-in-class compliance"}},
     {"id":28,"key":"financial_strength","name":"Financial strength","explanation":"Cash-flow struggles or strong margins?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Severe cash-flow issues","2":"Thin margins; credit concerns","3":"Stable but modest","4":"Healthy margins; consistent profit","5":"Very strong; well-capitalized"}},
 ]
-
 CATEGORIES = [
     {"label":"Revenue & Growth","icon":"💰","keys":["annual_revenues","yoy_revenue_growth","net_new_logo_revenues","pct_revenues_saas","net_revenue_expansion","total_revenues"]},
     {"label":"Sales Performance","icon":"📈","keys":["average_deal_size","avg_time_to_close","registered_deals","win_loss_ratio","partner_generated_opps_pct","frequency_of_business"]},
@@ -52,14 +106,17 @@ CATEGORIES = [
     {"label":"Risk & Governance","icon":"🛡️","keys":["quality_of_management","known_litigation","export_control_ip","financial_strength"]},
 ]
 METRICS_BY_KEY = {m["key"]: m for m in SCORECARD_METRICS}
-SAVE_PATH = pathlib.Path("scoring_criteria.json")
-CLIENT_PATH = pathlib.Path("client_info.json")
-ALL_PARTNERS_CSV = pathlib.Path("all_partners.csv")
 SC = {1:"#dc4040",2:"#e8820c",3:"#d4a917",4:"#49a34f",5:"#1b6e23"}
 
+
 # ═════════════════════════════════════════════════════════════════════════
-# 2. HELPERS
+# TENANT-AWARE DATA HELPERS
 # ═════════════════════════════════════════════════════════════════════════
+def _save_path(): return _current_data_dir() / "scoring_criteria.json"
+def _client_path(): return _current_data_dir() / "client_info.json"
+def _csv_path(): return _current_data_dir() / "all_partners.csv"
+def _class_path(): return _current_data_dir() / "classification_config.json"
+
 def _sf(val):
     if val is None: return None
     c = re.sub(r"[,$%\s]","",str(val).strip())
@@ -69,8 +126,9 @@ def _sf(val):
 
 def _init_criteria():
     if "criteria" in st.session_state: return
-    if SAVE_PATH.exists():
-        try: st.session_state["criteria"]=json.loads(SAVE_PATH.read_text()); return
+    sp = _save_path()
+    if sp.exists():
+        try: st.session_state["criteria"]=json.loads(sp.read_text()); return
         except Exception: pass
     cr={}
     for m in SCORECARD_METRICS:
@@ -94,9 +152,9 @@ def _save_criteria():
         else:
             for s in("1","2","3","4","5"):
                 cr[mk]["descriptors"][s]=st.session_state.get(f"p1_{mk}_s{s}_desc","")
-    SAVE_PATH.write_text(json.dumps(cr,indent=2))
+    _save_path().write_text(json.dumps(cr,indent=2))
 
-def score(mk,val):
+def calc_score(mk,val):
     cr=st.session_state["criteria"].get(mk)
     if not cr or not cr.get("enabled",True): return None
     if cr["type"]=="quantitative":
@@ -136,256 +194,114 @@ def _logo():
 def _brand():
     st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div></div>',unsafe_allow_html=True)
 
-def _append_partner_csv(row_dict):
-    """Append a partner's scores to the cumulative CSV."""
+def _append_csv(row_dict):
     em = _enabled()
-    fieldnames = ["partner_name","partner_year","partner_tier","partner_city","partner_country"]
-    fieldnames += [m["key"] for m in em]
-    fieldnames += ["total_score","max_possible","percentage"]
-    exists = ALL_PARTNERS_CSV.exists()
-    with open(ALL_PARTNERS_CSV, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        if not exists:
-            w.writeheader()
+    fnames = ["partner_name","partner_year","partner_tier","partner_city","partner_country"]
+    fnames += [m["key"] for m in em]
+    fnames += ["total_score","max_possible","percentage"]
+    cp = _csv_path(); exists = cp.exists()
+    with open(cp, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fnames, extrasaction="ignore")
+        if not exists: w.writeheader()
         w.writerow(row_dict)
 
-def _load_all_partners():
-    """Load all submitted partners from CSV."""
-    if not ALL_PARTNERS_CSV.exists(): return []
+def _load_partners(path=None):
+    cp = path or _csv_path()
+    if not cp.exists(): return []
     rows = []
-    with open(ALL_PARTNERS_CSV, newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
+    with open(cp, newline="") as f:
+        for row in csv.DictReader(f): rows.append(row)
     return rows
 
-def _generate_assessment_xlsx(partners, enabled_metrics):
-    """Generate an XLSX in memory with heat-map colors."""
+def _gen_xlsx(partners, enabled_metrics):
     try:
         import openpyxl
         from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-    except ImportError:
-        return None
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Partner Assessment"
-
-    fills = {
-        1: PatternFill(start_color="FA7A7A", end_color="FA7A7A", fill_type="solid"),
-        2: PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid"),
-        3: PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid"),
-        4: PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
-        5: PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
-    }
-    hdr_fill = PatternFill(start_color="1E2A3A", end_color="1E2A3A", fill_type="solid")
-    hdr_font = Font(color="FFFFFF", bold=True, size=10)
-    border = Border(
-        left=Side(style="thin", color="CCCCCC"), right=Side(style="thin", color="CCCCCC"),
-        top=Side(style="thin", color="CCCCCC"), bottom=Side(style="thin", color="CCCCCC"))
-
-    # Headers
-    headers = ["Rank", "Partner Name", "Tier", "City", "Country"]
-    headers += [m["name"] for m in enabled_metrics]
-    headers += ["Total", "%"]
-
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(1, c, h)
-        cell.fill = hdr_fill; cell.font = hdr_font; cell.alignment = Alignment(horizontal="center", wrap_text=True)
-        cell.border = border
-        ws.column_dimensions[cell.column_letter].width = 14 if c > 5 else 18
-
-    # Sort partners by total descending
-    def sort_key(p):
-        try: return -int(p.get("total_score", 0))
-        except: return 0
-    partners_sorted = sorted(partners, key=sort_key)
-
-    for ri, p in enumerate(partners_sorted, 2):
-        ws.cell(ri, 1, ri - 1).border = border
-        ws.cell(ri, 1, ri - 1).alignment = Alignment(horizontal="center")
-        ws.cell(ri, 2, p.get("partner_name", "")).border = border
-        ws.cell(ri, 3, p.get("partner_tier", "")).border = border
-        ws.cell(ri, 4, p.get("partner_city", "")).border = border
-        ws.cell(ri, 5, p.get("partner_country", "")).border = border
-
-        for ci, m in enumerate(enabled_metrics, 6):
-            raw = p.get(m["key"], "")
-            try:
-                v = int(raw)
-            except (ValueError, TypeError):
-                v = None
-            cell = ws.cell(ri, ci)
-            cell.border = border
-            cell.alignment = Alignment(horizontal="center")
-            if v and 1 <= v <= 5:
-                cell.value = v
-                cell.fill = fills[v]
-                cell.font = Font(bold=True)
-
-        tc = len(enabled_metrics) + 6
-        try:
-            total_val = int(p.get("total_score", 0))
-        except:
-            total_val = 0
-        ws.cell(ri, tc, total_val).border = border
-        ws.cell(ri, tc).font = Font(bold=True)
-        ws.cell(ri, tc).alignment = Alignment(horizontal="center")
-        try:
-            pct_val = float(p.get("percentage", 0))
-        except:
-            pct_val = 0
-        pct_cell = ws.cell(ri, tc + 1)
-        pct_cell.value = pct_val / 100
-        pct_cell.number_format = "0.0%"
-        pct_cell.border = border
-        pct_cell.alignment = Alignment(horizontal="center")
-        pct_cell.font = Font(bold=True)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    except ImportError: return None
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Partner Assessment"
+    fills={1:PatternFill(start_color="FA7A7A",end_color="FA7A7A",fill_type="solid"),2:PatternFill(start_color="FFFFCC",end_color="FFFFCC",fill_type="solid"),3:PatternFill(start_color="FFFFCC",end_color="FFFFCC",fill_type="solid"),4:PatternFill(start_color="C6EFCE",end_color="C6EFCE",fill_type="solid"),5:PatternFill(start_color="C6EFCE",end_color="C6EFCE",fill_type="solid")}
+    hf=PatternFill(start_color="1E2A3A",end_color="1E2A3A",fill_type="solid"); hfont=Font(color="FFFFFF",bold=True,size=10)
+    bdr=Border(left=Side(style="thin",color="CCCCCC"),right=Side(style="thin",color="CCCCCC"),top=Side(style="thin",color="CCCCCC"),bottom=Side(style="thin",color="CCCCCC"))
+    headers=["Rank","Partner Name","Tier","City","Country"]+[m["name"] for m in enabled_metrics]+["Total","%"]
+    for c,h in enumerate(headers,1):
+        cell=ws.cell(1,c,h); cell.fill=hf; cell.font=hfont; cell.alignment=Alignment(horizontal="center",wrap_text=True); cell.border=bdr
+        ws.column_dimensions[cell.column_letter].width=14 if c>5 else 18
+    ps=sorted(partners,key=lambda p:-int(p.get("total_score",0) or 0))
+    for ri,p in enumerate(ps,2):
+        ws.cell(ri,1,ri-1).border=bdr; ws.cell(ri,1).alignment=Alignment(horizontal="center")
+        ws.cell(ri,2,p.get("partner_name","")).border=bdr
+        ws.cell(ri,3,p.get("partner_tier","")).border=bdr
+        ws.cell(ri,4,p.get("partner_city","")).border=bdr
+        ws.cell(ri,5,p.get("partner_country","")).border=bdr
+        for ci,m in enumerate(enabled_metrics,6):
+            try: v=int(p.get(m["key"],"") or 0)
+            except: v=None
+            cell=ws.cell(ri,ci); cell.border=bdr; cell.alignment=Alignment(horizontal="center")
+            if v and 1<=v<=5: cell.value=v; cell.fill=fills[v]; cell.font=Font(bold=True)
+        tc=len(enabled_metrics)+6
+        try: tv=int(p.get("total_score",0) or 0)
+        except: tv=0
+        ws.cell(ri,tc,tv).border=bdr; ws.cell(ri,tc).font=Font(bold=True); ws.cell(ri,tc).alignment=Alignment(horizontal="center")
+        try: pv=float(p.get("percentage",0) or 0)
+        except: pv=0
+        pc=ws.cell(ri,tc+1); pc.value=pv/100; pc.number_format="0.0%"; pc.border=bdr; pc.alignment=Alignment(horizontal="center"); pc.font=Font(bold=True)
+    buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
 
 
 # ═════════════════════════════════════════════════════════════════════════
 # CLASSIFICATION ENGINE
 # ═════════════════════════════════════════════════════════════════════════
-
-# Alias map: user-friendly names from the Classification sheet → metric keys
-METRIC_ALIASES = {
-    "total company revenues": "total_revenues",
-    "annual vendor revenues": "annual_revenues",
-    "annual revenues": "annual_revenues",
-    "y-y growth rate": "yoy_revenue_growth",
-    "y-y revenue growth": "yoy_revenue_growth",
-    "year-on-year revenue growth": "yoy_revenue_growth",
-    "net new logo growth": "net_new_logo_revenues",
-    "net-new logo revenues": "net_new_logo_revenues",
-    "# of known competitors": None,  # not in scorecard
-    "your product ranking": None,    # not in scorecard
-}
-# Add all actual metric keys and names as self-references
+METRIC_ALIASES = {"total company revenues":"total_revenues","annual vendor revenues":"annual_revenues","annual revenues":"annual_revenues","y-y growth rate":"yoy_revenue_growth","y-y revenue growth":"yoy_revenue_growth","year-on-year revenue growth":"yoy_revenue_growth","net new logo growth":"net_new_logo_revenues","net-new logo revenues":"net_new_logo_revenues","# of known competitors":None,"your product ranking":None}
 for _m in SCORECARD_METRICS:
-    METRIC_ALIASES[_m["key"]] = _m["key"]
-    METRIC_ALIASES[_m["name"].lower()] = _m["key"]
+    METRIC_ALIASES[_m["key"]]=_m["key"]; METRIC_ALIASES[_m["name"].lower()]=_m["key"]
 
-# Default quadrant config from the Classification sheet
-DEFAULT_QUADRANT_CONFIG = {
-    1: [
-        ("total_revenues", "high"),
-        ("annual_revenues", "low"),
-        ("yoy_revenue_growth", "low"),
-    ],
-    2: [
-        ("annual_revenues", "high"),
-        ("yoy_revenue_growth", "high"),
-        ("net_new_logo_revenues", "high"),
-    ],
-    3: [
-        ("annual_revenues", "high"),
-        ("yoy_revenue_growth", "low"),
-        ("net_new_logo_revenues", "mid"),
-    ],
-    4: [
-        ("annual_revenues", "low"),
-        ("yoy_revenue_growth", "low"),
-    ],
-}
+DEFAULT_Q_CONFIG = {1:[("total_revenues","high"),("annual_revenues","low"),("yoy_revenue_growth","low")],2:[("annual_revenues","high"),("yoy_revenue_growth","high"),("net_new_logo_revenues","high")],3:[("annual_revenues","high"),("yoy_revenue_growth","low"),("net_new_logo_revenues","mid")],4:[("annual_revenues","low"),("yoy_revenue_growth","low")]}
 
-CLASSIFICATION_PATH = pathlib.Path("classification_config.json")
-
-def _level_match(score_val, level):
-    """Check if a score value matches a level: high(>=4), mid(==3), low(<=2), any(>0)."""
-    if score_val is None:
-        return False
-    try:
-        v = int(score_val)
-    except (ValueError, TypeError):
-        return False
-    if v == 0:
-        return False
-    if level is None or level == "any":
-        return v > 0
-    if level == "high":
-        return v >= 4
-    if level == "mid":
-        return v == 3
-    if level == "low":
-        return v <= 2
+def _level_match(sv, level):
+    try: v=int(sv)
+    except: return False
+    if v==0: return False
+    if level is None or level=="any": return v>0
+    if level=="high": return v>=4
+    if level=="mid": return v==3
+    if level=="low": return v<=2
     return False
 
-def _resolve_metric_key(name_or_key):
-    """Resolve a metric alias/name to a scorecard key, or None if unmapped."""
-    if not name_or_key:
-        return None
-    return METRIC_ALIASES.get(name_or_key.lower().strip())
-
-def classify_partners(partners, quadrant_config, enabled_metric_keys):
-    """
-    Classify partners into quadrants.
-    partners: list of dicts with metric keys → score values
-    quadrant_config: {1: [(metric_key, level), ...], 2: [...], ...}
-    Returns: dict {partner_name: quadrant_number}
-    """
-    results = {}
+def classify_partners(partners, qconfig, em_keys):
+    results={}
     for p in partners:
-        name = p.get("partner_name", "Unknown")
-        try:
-            total = int(p.get("total_score", 0))
-        except (ValueError, TypeError):
-            total = 0
-        if total == 0:
-            continue  # skip partners with no scores
-
-        assigned = None
-        for q_num in sorted(quadrant_config.keys()):
-            criteria = quadrant_config[q_num]
-            match = True
-            for (metric_key, level) in criteria:
-                if metric_key is None:
-                    continue  # skip unmapped metrics
-                if metric_key not in enabled_metric_keys:
-                    continue  # skip disabled metrics
-                score_val = p.get(metric_key)
-                if not _level_match(score_val, level):
-                    match = False
-                    break
-            if match and criteria:  # must have at least one criterion
-                assigned = q_num
-                break
-
-        results[name] = assigned if assigned is not None else max(quadrant_config.keys())
+        name=p.get("partner_name","Unknown")
+        try: total=int(p.get("total_score",0) or 0)
+        except: total=0
+        if total==0: continue
+        assigned=None
+        for qn in sorted(qconfig.keys()):
+            crit=qconfig[qn]; match=True
+            for(mk,lvl) in crit:
+                if mk is None or mk not in em_keys: continue
+                if not _level_match(p.get(mk),lvl): match=False; break
+            if match and crit: assigned=qn; break
+        results[name]=assigned if assigned is not None else max(qconfig.keys())
     return results
 
-def _load_classification_config():
-    if CLASSIFICATION_PATH.exists():
+def _load_q_config():
+    cp=_class_path()
+    if cp.exists():
         try:
-            raw = json.loads(CLASSIFICATION_PATH.read_text())
-            # Convert string keys back to ints
-            return {int(k): [(tuple(item) if isinstance(item, list) else item) for item in v] for k, v in raw.items()}
-        except Exception:
-            pass
-    return DEFAULT_QUADRANT_CONFIG.copy()
+            raw=json.loads(cp.read_text())
+            return {int(k):[(tuple(i) if isinstance(i,list) else i) for i in v] for k,v in raw.items()}
+        except: pass
+    return DEFAULT_Q_CONFIG.copy()
 
-def _save_classification_config(config):
-    CLASSIFICATION_PATH.write_text(json.dumps({str(k): v for k, v in config.items()}, indent=2))
+def _save_q_config(config):
+    _class_path().write_text(json.dumps({str(k):v for k,v in config.items()},indent=2))
 
-QUADRANT_LABELS = {
-    1: ("Strategic / Underperforming", "#2563eb"),
-    2: ("Top Performers", "#1b6e23"),
-    3: ("Growth Potential", "#d4a917"),
-    4: ("Long Tail / At Risk", "#dc4040"),
-}
-QUADRANT_DESCRIPTIONS = {
-    1: "High total revenue but low vendor-specific performance — strategic accounts that need activation",
-    2: "Strong across revenue, growth, and new logos — your best-performing partners",
-    3: "Good revenue but stagnant growth — need targeted programs to reignite",
-    4: "Low revenue and low growth — evaluate ROI of continued investment",
-}
+Q_LABELS={1:("Strategic / Underperforming","#2563eb"),2:("Top Performers","#1b6e23"),3:("Growth Potential","#d4a917"),4:("Long Tail / At Risk","#dc4040")}
+Q_DESCS={1:"High total revenue but low vendor-specific performance",2:"Strong across revenue, growth, and new logos",3:"Good revenue but stagnant growth",4:"Low revenue and low growth"}
 
 
 # ═════════════════════════════════════════════════════════════════════════
-# 3. PAGE CONFIG & CSS
+# PAGE CONFIG & CSS
 # ═════════════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="ChannelPRO — Partner Revenue Optimizer", page_icon="📋", layout="wide")
 st.markdown("""
@@ -416,68 +332,146 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 .partner-hdr{background:linear-gradient(135deg,#8b9bb8,#a5b3c9);color:#fff;padding:10px 18px;border-radius:10px 10px 0 0;font-weight:700;font-size:1rem}
 .live-score{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;font-size:1.2rem;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace}
 .hint-row{font-size:.78rem;color:#7a8a9e;font-family:'JetBrains Mono',monospace;margin:6px 0 10px;line-height:1.6}
-/* Darker input fields */
-[data-testid="stAppViewContainer"] input[type="text"],
-[data-testid="stAppViewContainer"] textarea {
-    background: #e8ebf1 !important; border: 1.5px solid #b0bdd0 !important;
-}
-[data-testid="stAppViewContainer"] input[type="text"]:focus,
-[data-testid="stAppViewContainer"] textarea:focus {
-    background: #fff !important; border-color: #2563eb !important;
-}
-/* Heat-map table */
+[data-testid="stAppViewContainer"] input[type="text"],[data-testid="stAppViewContainer"] textarea{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important}
+[data-testid="stAppViewContainer"] input[type="text"]:focus,[data-testid="stAppViewContainer"] textarea:focus{background:#fff!important;border-color:#2563eb!important}
 .hm-tbl{width:100%;border-collapse:collapse;font-size:.82rem;background:#fff;margin:1rem 0}
 .hm-tbl th{background:#1e2a3a;color:#fff;padding:8px 6px;text-align:center;font-weight:700;font-size:.72rem;text-transform:uppercase;white-space:nowrap;border:1px solid #2a3d57}
 .hm-tbl td{padding:6px;text-align:center;border:1px solid #e2e6ed;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:.82rem}
-.hm-tbl tr:hover td{filter:brightness(0.95)}
 .hm1{background:#FA7A7A;color:#fff}.hm2{background:#FFFFCC;color:#333}.hm3{background:#FFFFCC;color:#333}
 .hm4{background:#C6EFCE;color:#1b6e23}.hm5{background:#C6EFCE;color:#1b6e23}
 .hm-total{background:#1e2a3a;color:#fff;font-weight:800}
 .q-card{border-radius:12px;padding:18px 22px;margin-bottom:14px;border:2px solid #e2e6ed}
-.q-card h4{margin:0 0 8px;font-size:1rem;font-weight:800}
 .q-badge{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;font-size:1.1rem;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-right:10px}
 .q-partner{display:inline-block;padding:4px 14px;border-radius:8px;margin:3px 4px;font-size:.88rem;font-weight:600;background:#f0f2f7;color:#1e2a3a}
 .q-criteria{font-size:.82rem;color:#5a6a7e;margin-top:6px;line-height:1.6}
+.score-pill{display:inline-block;padding:3px 14px;border-radius:20px;font-weight:800;font-size:.82rem;color:#fff;min-width:28px;text-align:center;font-family:'JetBrains Mono',monospace}
+.login-box{max-width:420px;margin:80px auto;background:#fff;border-radius:16px;padding:40px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+.tenant-badge{display:inline-block;padding:4px 12px;border-radius:8px;font-size:.82rem;font-weight:700;background:#2563eb;color:#fff;margin-bottom:8px}
 </style>
 """, unsafe_allow_html=True)
 
-# ═════════════════════════════════════════════════════════════════════════
-# 4. INIT
-# ═════════════════════════════════════════════════════════════════════════
-_init_criteria()
-if "current_page" not in st.session_state: st.session_state["current_page"]="Client Intake"
-if "client_info" not in st.session_state:
-    if CLIENT_PATH.exists():
-        try: st.session_state["client_info"]=json.loads(CLIENT_PATH.read_text())
-        except: st.session_state["client_info"]={}
-    else: st.session_state["client_info"]={}
-
-PAGES=["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification"]
 
 # ═════════════════════════════════════════════════════════════════════════
-# 5. SIDEBAR
+# LOGIN SCREEN
 # ═════════════════════════════════════════════════════════════════════════
+if "auth_user" not in st.session_state:
+    st.session_state["auth_user"] = None
+
+if st.session_state["auth_user"] is None:
+    st.markdown(f"""<div class="login-box">
+        <div style="text-align:center;margin-bottom:24px;">
+            <img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;margin-bottom:12px;"><br>
+            <span style="font-size:1.4rem;font-weight:800;color:#1e2a3a;">ChannelPRO</span><br>
+            <span style="font-size:.88rem;color:#4a6a8f;">Partner Revenue Optimizer</span>
+        </div></div>""", unsafe_allow_html=True)
+
+    users = _load_users()
+    with st.form("login_form"):
+        uname = st.text_input("Username", placeholder="Enter your username")
+        pw = st.text_input("Password", type="password", placeholder="Enter your password")
+        submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+
+    if submitted:
+        if uname in users and _verify_pw(pw, users[uname]["password_hash"]):
+            st.session_state["auth_user"] = uname
+            u = users[uname]
+            st.session_state["auth_role"] = u["role"]
+            st.session_state["auth_display"] = u["display_name"]
+            st.session_state["auth_tenant"] = u.get("tenant")
+            if u["role"] == "admin":
+                tenants = _all_tenants()
+                st.session_state["active_tenant"] = tenants[0] if tenants else None
+            else:
+                st.session_state["active_tenant"] = u["tenant"]
+            st.rerun()
+        else:
+            st.error("Invalid username or password.")
+
+    st.caption("Default admin login: **admin** / **admin** — change this after first login!")
+    st.stop()
+
+# ═════════════════════════════════════════════════════════════════════════
+# LOGGED IN — INIT
+# ═════════════════════════════════════════════════════════════════════════
+is_admin = st.session_state.get("auth_role") == "admin"
+active_tenant = st.session_state.get("active_tenant")
+
+# Ensure tenant dir exists
+if active_tenant:
+    _tenant_dir(active_tenant)
+
+# Init tenant-specific state
+if active_tenant:
+    _init_criteria()
+    if "client_info" not in st.session_state:
+        cp = _client_path()
+        if cp.exists():
+            try: st.session_state["client_info"]=json.loads(cp.read_text())
+            except: st.session_state["client_info"]={}
+        else: st.session_state["client_info"]={}
+
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "Client Intake"
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ═════════════════════════════════════════════════════════════════════════
+CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification"]
+ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
+
 with st.sidebar:
     _logo()
     st.markdown("**ChannelPRO** — Partner Revenue Optimizer")
     st.markdown("---")
-    page=st.radio("Navigate",PAGES,
-        index=PAGES.index(st.session_state["current_page"]) if st.session_state["current_page"] in PAGES else 0,
-        key="nav_radio",label_visibility="collapsed")
-    st.session_state["current_page"]=page
+
+    # User info + logout
+    st.markdown(f"👤 **{st.session_state.get('auth_display','User')}**")
+    if is_admin:
+        st.markdown('<span class="tenant-badge">ADMIN</span>', unsafe_allow_html=True)
+    elif active_tenant:
+        st.markdown(f'<span class="tenant-badge">{active_tenant}</span>', unsafe_allow_html=True)
+    if st.button("🚪 Sign Out", use_container_width=True):
+        for k in list(st.session_state.keys()): del st.session_state[k]
+        st.rerun()
     st.markdown("---")
-    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification"):
+
+    # Admin: tenant selector
+    if is_admin:
+        tenants = _all_tenants()
+        if tenants:
+            cur_idx = tenants.index(active_tenant) if active_tenant in tenants else 0
+            selected = st.selectbox("🏢 Active Client", tenants, index=cur_idx, key="tenant_sel")
+            if selected != active_tenant:
+                st.session_state["active_tenant"] = selected
+                # Clear tenant-specific state so it reloads
+                for k in ["criteria","client_info","_p1_saved","_ci_saved","_p2_submitted","_q_saved","q_config"]:
+                    st.session_state.pop(k, None)
+                st.rerun()
+        else:
+            st.info("No clients yet. Create one in Manage Users.")
+        st.markdown("---")
+
+    pages = ADMIN_PAGES if is_admin else CLIENT_PAGES
+    page = st.radio("Navigate", pages,
+        index=pages.index(st.session_state["current_page"]) if st.session_state["current_page"] in pages else 0,
+        key="nav_radio", label_visibility="collapsed")
+    st.session_state["current_page"] = page
+    st.markdown("---")
+
+    chosen_cat = "All Metrics"
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Admin — Manage Users","Admin — All Clients"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
-    else: chosen_cat="All Metrics"
     st.markdown("---")
-    if SAVE_PATH.exists(): st.success("✅ Criteria saved")
-    else: st.info("ℹ️ Complete Step 1 first")
-    en=_enabled()
-    st.metric("Active Metrics",len(en))
-    # Partner count
-    partners = _load_all_partners()
-    st.metric("Partners Scored", len(partners))
+
+    if active_tenant:
+        if _save_path().exists(): st.success("✅ Criteria saved")
+        else: st.info("ℹ️ Complete Step 1 first")
+        en=_enabled()
+        st.metric("Active Metrics",len(en))
+        partners=_load_partners()
+        st.metric("Partners Scored",len(partners))
 
 if chosen_cat=="All Metrics": visible_metrics=SCORECARD_METRICS
 else:
@@ -485,24 +479,27 @@ else:
     ck=next(c["keys"] for c in CATEGORIES if c["label"]==cn)
     visible_metrics=[METRICS_BY_KEY[k] for k in ck]
 
+# Guard: need a tenant for most pages
+if not active_tenant and page not in ("Admin — Manage Users","Admin — All Clients"):
+    _brand()
+    st.warning("No client selected. Use **Admin → Manage Users** to create a client account first.")
+    st.stop()
+
+
 # ═════════════════════════════════════════════════════════════════════════
-# 6. CLIENT INTAKE
+# CLIENT INTAKE
 # ═════════════════════════════════════════════════════════════════════════
 if page=="Client Intake":
     _brand()
     st.markdown("""<div class="info-box">
     The <b>Partner Revenue Optimizer</b> is a structured process that will:
-    <ol><li>Right-size the margins you provide to your partners, freeing up significant cash flow and revenues for you; and</li>
-    <li>Lay the foundation for targeted partner marketing programs to drive more revenues from new and existing partners.</li></ol>
-    <p>An experienced channel consultant from <b>The York Group</b> will guide you through the process. Some metrics will be readily available from your systems, while others will be more subjective. It is likely that some are not currently tracked — that is OK.</p>
-    <p>Each metric is rated <b>1–5</b> (5 = best). Scores will be used to review each partner and feed into a heat map of all partners across all metrics.</p>
-    </div>""",unsafe_allow_html=True)
-
+    <ol><li>Right-size the margins you provide to your partners, freeing up significant cash flow and revenues; and</li>
+    <li>Lay the foundation for targeted partner marketing programs to drive more revenues.</li></ol>
+    <p>An experienced channel consultant from <b>The York Group</b> will guide you through the process.
+    Each metric is rated <b>1–5</b> (5 = best).</p></div>""",unsafe_allow_html=True)
     if st.session_state.get("_ci_saved"):
-        st.markdown('<div class="toast">✅ Client information saved</div>',unsafe_allow_html=True)
-        st.session_state["_ci_saved"]=False
-
-    ci=st.session_state["client_info"]
+        st.markdown('<div class="toast">✅ Client information saved</div>',unsafe_allow_html=True); st.session_state["_ci_saved"]=False
+    ci=st.session_state.get("client_info",{})
     with st.form("ci_form"):
         st.markdown('<div class="sec-head">📇 Client Contact Information</div>',unsafe_allow_html=True)
         c1,c2=st.columns(2)
@@ -515,94 +512,61 @@ if page=="Client Intake":
             ci_pm=st.text_input("Client project manager",value=ci.get("project_manager",""),key="ci_pm")
             ci_city=st.text_input("City",value=ci.get("city",""),key="ci_city")
             ci_email=st.text_input("Primary contact email",value=ci.get("email",""),key="ci_email")
-
         st.markdown('<div class="sec-head">🏢 Client Business Information</div>',unsafe_allow_html=True)
-
-        st.markdown("**What size company do you typically sell to?** *(Select no more than two)*")
-        sz_opts=["<100","100-200","200-500","500-1,000","1,000-5,000",">5,000"]
-        saved_sz=ci.get("company_size",[])
-        sz_cols=st.columns(len(sz_opts)); sz_sel=[]
+        st.markdown("**Company size** *(max two)*")
+        sz_opts=["<100","100-200","200-500","500-1,000","1,000-5,000",">5,000"]; saved_sz=ci.get("company_size",[]); sz_cols=st.columns(len(sz_opts)); sz_sel=[]
         for i,o in enumerate(sz_opts):
             with sz_cols[i]:
                 if st.checkbox(o,value=o in saved_sz,key=f"ci_sz_{i}"): sz_sel.append(o)
-
-        st.markdown("**Verticals you sell to?**")
-        v_opts=["Manufacturing","Automotive","Health care","Financial services","Retail","Government","Education","Media and entertainment","Professional services","Life sciences, pharmaceuticals","High-tech, electronics, communications, telecom","None - horizontal solution"]
-        saved_v=ci.get("verticals",[])
-        vc=st.columns(3); v_sel=[]
+        st.markdown("**Verticals**")
+        v_opts=["Manufacturing","Automotive","Health care","Financial services","Retail","Government","Education","Media and entertainment","Professional services","Life sciences, pharmaceuticals","High-tech, electronics, communications, telecom","None - horizontal solution"]; saved_v=ci.get("verticals",[]); vc=st.columns(3); v_sel=[]
         for i,o in enumerate(v_opts):
             with vc[i%3]:
                 if st.checkbox(o,value=o in saved_v,key=f"ci_v_{i}"): v_sel.append(o)
         other_v=st.text_input("Other verticals",value=ci.get("other_verticals",""),key="ci_ov")
-
-        st.markdown("**Solution delivery** *(Check all that apply)*")
-        d_opts=["On-premise","SaaS/PaaS","IaaS/VM","Device (HW+SW)"]
-        saved_d=ci.get("solution_delivery",[])
-        dc=st.columns(len(d_opts)); d_sel=[]
+        st.markdown("**Solution delivery**")
+        d_opts=["On-premise","SaaS/PaaS","IaaS/VM","Device (HW+SW)"]; saved_d=ci.get("solution_delivery",[]); dc=st.columns(len(d_opts)); d_sel=[]
         for i,o in enumerate(d_opts):
             with dc[i]:
                 if st.checkbox(o,value=o in saved_d,key=f"ci_d_{i}"): d_sel.append(o)
-
-        st.markdown("**Average first-year transaction value** (solution only, excluding services)")
-        t_opts=["Under $1,000","$1,000–$10,000","$10,000–$50,000","$50,000–$100,000","More than $100,000"]
-        saved_t=ci.get("avg_transaction_value","")
+        st.markdown("**Average first-year transaction value**")
+        t_opts=["Under $1,000","$1,000–$10,000","$10,000–$50,000","$50,000–$100,000","More than $100,000"]; saved_t=ci.get("avg_transaction_value","")
         txn=st.radio("Range",t_opts,index=t_opts.index(saved_t) if saved_t in t_opts else 0,key="ci_txn",horizontal=True)
-
         st.markdown("**Services as % of license/subscription**")
-        s_opts=["No services","<20%","20–50%","50–200%",">200%"]
-        saved_s=ci.get("services_pct","")
+        s_opts=["No services","<20%","20–50%","50–200%",">200%"]; saved_s=ci.get("services_pct","")
         svc=st.radio("Range",s_opts,index=s_opts.index(saved_s) if saved_s in s_opts else 0,key="ci_svc",horizontal=True)
         svc_c=st.text_input("Comments",value=ci.get("services_comments",""),key="ci_svc_c")
-
         st.markdown("**How many resellers/channel partners?**")
-        p_opts=["<100","100-200","200-500","500-1,000","1,000-5,000",">5,000"]
-        saved_p=ci.get("partner_count","")
+        p_opts=["<100","100-200","200-500","500-1,000","1,000-5,000",">5,000"]; saved_p=ci.get("partner_count","")
         pc=st.radio("Range",p_opts,index=p_opts.index(saved_p) if saved_p in p_opts else 0,key="ci_pc",horizontal=True)
-
-        st.markdown("**% of revenues from indirect channels**")
-        i_opts=["<10%","10-30%","30-50%",">50%"]
-        saved_i=ci.get("indirect_revenue_pct","")
+        st.markdown("**% revenues from indirect channels**")
+        i_opts=["<10%","10-30%","30-50%",">50%"]; saved_i=ci.get("indirect_revenue_pct","")
         ind=st.radio("Range",i_opts,index=i_opts.index(saved_i) if saved_i in i_opts else 0,key="ci_ind",horizontal=True)
-
-        st.markdown("**Discounts to channel partners** *(Select all that apply)*")
-        disc_opts=["<15%","15-30%","30-50%",">60%","Other"]
-        saved_disc=ci.get("discounts",[])
-        disc_c=st.columns(len(disc_opts)); disc_sel=[]
+        st.markdown("**Discounts to partners**")
+        disc_opts=["<15%","15-30%","30-50%",">60%","Other"]; saved_disc=ci.get("discounts",[]); disc_c=st.columns(len(disc_opts)); disc_sel=[]
         for i,o in enumerate(disc_opts):
             with disc_c[i]:
                 if st.checkbox(o,value=o in saved_disc,key=f"ci_disc_{i}"): disc_sel.append(o)
-
         st.markdown("**Partner designations**")
         desig=st.text_input("Comma-separated, e.g. gold, silver, bronze",value=ci.get("partner_designations",""),key="ci_desig")
-
         st.markdown("---")
         _,cr=st.columns([3,1])
         with cr: ci_sub=st.form_submit_button("Next →  Step 1",use_container_width=True,type="primary")
-
     if ci_sub:
         st.session_state["client_info"]={"client_name":ci_name,"project_manager":ci_pm,"url":ci_url,"city":ci_city,"country":ci_country,"email":ci_email,"phone":ci_phone,"company_size":sz_sel,"verticals":v_sel,"other_verticals":other_v,"solution_delivery":d_sel,"avg_transaction_value":txn,"services_pct":svc,"services_comments":svc_c,"partner_count":pc,"indirect_revenue_pct":ind,"discounts":disc_sel,"partner_designations":desig}
-        CLIENT_PATH.write_text(json.dumps(st.session_state["client_info"],indent=2))
-        st.session_state["_ci_saved"]=True
-        st.session_state["current_page"]="Step 1 — Scoring Criteria"
-        st.rerun()
+        _client_path().write_text(json.dumps(st.session_state["client_info"],indent=2))
+        st.session_state["_ci_saved"]=True; st.session_state["current_page"]="Step 1 — Scoring Criteria"; st.rerun()
 
-    if CLIENT_PATH.exists():
-        st.markdown("---")
-        with st.expander("📊 Download stored client data"):
-            st.download_button("⬇️ Download client_info.json",CLIENT_PATH.read_text(),"client_info.json","application/json")
 
 # ═════════════════════════════════════════════════════════════════════════
-# 7. STEP 1 — SCORING CRITERIA
+# STEP 1 — SCORING CRITERIA
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Step 1 — Scoring Criteria":
     _brand()
     st.markdown("## Step 1 — Define Scoring Criteria")
-    st.markdown("Configure **1–5** thresholds. Toggle metrics on/off with the checkbox.")
-
+    st.markdown("Configure **1–5** thresholds. Toggle metrics on/off.")
     if st.session_state.get("_p1_saved"):
-        st.markdown('<div class="toast">✅ Criteria saved</div>',unsafe_allow_html=True)
-        st.session_state["_p1_saved"]=False
-
+        st.markdown('<div class="toast">✅ Criteria saved</div>',unsafe_allow_html=True); st.session_state["_p1_saved"]=False
     with st.form("p1_form"):
         for m in visible_metrics:
             mk=m["key"]; cr=st.session_state["criteria"][mk]; iq=m["type"]=="quantitative"
@@ -627,39 +591,29 @@ elif page=="Step 1 — Scoring Criteria":
                     with cols[idx]:
                         st.markdown(f'<div class="sb sb{s}">{s}</div>',unsafe_allow_html=True)
                         st.text_area("desc",value=cr["descriptors"][s],key=f"p1_{mk}_s{s}_desc",height=100,label_visibility="collapsed")
-
         st.markdown("---")
         _,cm,cr=st.columns([2,1,1])
         with cm: p1s=st.form_submit_button("💾  Save Criteria",use_container_width=True,type="primary")
         with cr: p1n=st.form_submit_button("Next →  Step 2",use_container_width=True)
-
     if p1s or p1n:
-        _save_criteria()
-        st.session_state["_p1_saved"]=True
+        _save_criteria(); st.session_state["_p1_saved"]=True
         if p1n: st.session_state["current_page"]="Step 2 — Score a Partner"
         st.rerun()
 
+
 # ═════════════════════════════════════════════════════════════════════════
-# 8. STEP 2 — SCORE A PARTNER
+# STEP 2 — SCORE A PARTNER
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Step 2 — Score a Partner":
     _brand()
     st.markdown("## Step 2 — Score a Partner")
-
-    if not SAVE_PATH.exists():
-        st.warning("⚠️ Complete **Step 1** first.")
-        st.stop()
-
-    st.session_state["criteria"]=json.loads(SAVE_PATH.read_text())
-    cr=st.session_state["criteria"]
-    em=_enabled(); mx=len(em)*5
-
+    if not _save_path().exists():
+        st.warning("⚠️ Complete **Step 1** first."); st.stop()
+    st.session_state["criteria"]=json.loads(_save_path().read_text())
+    cr=st.session_state["criteria"]; em=_enabled(); mx=len(em)*5
     if st.session_state.get("_p2_submitted"):
-        st.markdown('<div class="toast">✅ Partner submitted & saved to CSV. Ready for next partner.</div>',unsafe_allow_html=True)
-        st.session_state["_p2_submitted"]=False
-
-    st.markdown(f"Enter performance data. Live scoring from Step 1 criteria. Total out of **{mx}** ({len(em)} metrics × 5).")
-
+        st.markdown('<div class="toast">✅ Partner submitted & saved. Ready for next partner.</div>',unsafe_allow_html=True); st.session_state["_p2_submitted"]=False
+    st.markdown(f"Total out of **{mx}** ({len(em)} metrics × 5).")
     # Partner details
     st.markdown('<div class="partner-hdr">Partner details</div>',unsafe_allow_html=True)
     tiers=_tiers(); t_opts=["Please choose..."]+tiers if tiers else ["Please choose...","(Set tiers in Client Intake)"]
@@ -670,23 +624,15 @@ elif page=="Step 2 — Score a Partner":
     pc4,pc5=st.columns(2)
     with pc4: pcity=st.text_input("City",key="p2_city",placeholder="e.g. Paris")
     with pc5: pcountry=st.text_input("Country",key="p2_country",placeholder="e.g. France")
-
     st.markdown("---")
-
-    # Filter enabled + category
     if chosen_cat=="All Metrics": ve=em
     else:
-        cn=chosen_cat.split("  ",1)[-1]
-        ck=next(c["keys"] for c in CATEGORIES if c["label"]==cn)
-        ve=[m for m in em if m["key"] in ck]
-
-    # Metric inputs with live scoring
+        cn=chosen_cat.split("  ",1)[-1]; ck=next(c["keys"] for c in CATEGORIES if c["label"]==cn); ve=[m for m in em if m["key"] in ck]
     for m in ve:
         mk=m["key"]; mc=cr[mk]; iq=m["type"]=="quantitative"
         tt='<span class="tag tag-q">Quantitative</span>' if iq else '<span class="tag tag-ql">Qualitative</span>'
         dt=f'<span class="tag {"tag-hi" if m["direction"]=="higher_is_better" else "tag-lo"}">{"↑ Higher" if m["direction"]=="higher_is_better" else "↓ Lower"} is better</span>'
         st.markdown(f'<div class="mc"><span class="mname">{m["id"]}. {m["name"]}</span>{tt}{dt}<div class="mexpl">{m["explanation"]}</div></div>',unsafe_allow_html=True)
-
         if iq:
             u=mc.get("unit","") or ""
             hints=[]
@@ -698,323 +644,319 @@ elif page=="Step 2 — Score a Partner":
             if hints: st.markdown(f'<div class="hint-row">Ranges ({u}): {" &nbsp;·&nbsp; ".join(hints)}</div>',unsafe_allow_html=True)
             ic,sc_c=st.columns([4,1])
             with ic: pv=st.text_input(f"Value ({u})",key=f"p2_{mk}",placeholder=f"Enter number ({u})",label_visibility="collapsed")
-            scr=score(mk,pv)
+            scr=calc_score(mk,pv)
         else:
             opts=["— Select —"]+[f"({s}) {mc['descriptors'][s]}" for s in("1","2","3","4","5")]
             ic,sc_c=st.columns([4,1])
             with ic: pv=st.selectbox("Level",opts,key=f"p2_{mk}",label_visibility="collapsed")
-            if pv and pv!="— Select —":
-                raw_d=re.sub(r"^\(\d\)\s*","",pv); scr=score(mk,raw_d)
+            if pv and pv!="— Select —": raw_d=re.sub(r"^\(\d\)\s*","",pv); scr=calc_score(mk,raw_d)
             else: scr=None
         with sc_c:
             if scr: st.markdown(f'<div class="live-score" style="background:{SC[scr]}">{scr}</div>',unsafe_allow_html=True)
             else: st.markdown('<div class="live-score" style="background:#ccc">—</div>',unsafe_allow_html=True)
-
-    # Live summary
+    # Summary
     st.markdown("---")
     full={}
     for m in em:
         mk=m["key"]; pv=st.session_state.get(f"p2_{mk}","")
         if not pv or pv=="— Select —": full[mk]=None
-        elif m["type"]=="qualitative" and pv.startswith("("):
-            full[mk]=score(mk,re.sub(r"^\(\d\)\s*","",pv))
-        else: full[mk]=score(mk,pv)
-    si={k:v for k,v in full.items() if v is not None}
-    total=sum(si.values()); sn=len(si); mp=sn*5
-    pct=(total/mp*100) if mp else 0; gl,gc=_grade(pct)
-    pname=st.session_state.get("p2_pn","Partner") or "Partner"
-
+        elif m["type"]=="qualitative" and pv.startswith("("): full[mk]=calc_score(mk,re.sub(r"^\(\d\)\s*","",pv))
+        else: full[mk]=calc_score(mk,pv)
+    si={k:v for k,v in full.items() if v is not None}; total=sum(si.values()); sn=len(si); mp=sn*5
+    pct=(total/mp*100) if mp else 0; gl,gc=_grade(pct); pname=st.session_state.get("p2_pn","Partner") or "Partner"
     st.markdown(f"### Live Summary — {pname}")
     c1,c2,c3,c4=st.columns(4)
     with c1: st.markdown(f'<div class="sum-card"><div class="sum-big">{total}</div><div class="sum-lbl">Total</div></div>',unsafe_allow_html=True)
     with c2: st.markdown(f'<div class="sum-card"><div class="sum-big">{sn}/{len(em)}</div><div class="sum-lbl">Scored</div></div>',unsafe_allow_html=True)
     with c3: st.markdown(f'<div class="sum-card"><div class="sum-big">{pct:.1f}%</div><div class="sum-lbl">Percentage</div></div>',unsafe_allow_html=True)
     with c4: st.markdown(f'<div class="sum-card"><div class="sum-big" style="color:{gc}">{gl}</div><div class="sum-lbl">Grade</div></div>',unsafe_allow_html=True)
-
-    # Submit button
     st.markdown("---")
     _,_,submit_col=st.columns([2,2,1])
     with submit_col:
         if st.button("✅  Submit & Start New Partner",use_container_width=True,type="primary"):
-            if not pname or pname=="Partner":
-                st.error("Enter a partner name first.")
+            if not pname or pname=="Partner": st.error("Enter a partner name first.")
             else:
-                # Build row and append to CSV
-                row={"partner_name":pname,"partner_year":st.session_state.get("p2_py",""),
-                     "partner_tier":st.session_state.get("p2_pt",""),"partner_city":st.session_state.get("p2_city",""),
-                     "partner_country":st.session_state.get("p2_country",""),
-                     "total_score":total,"max_possible":mp,"percentage":round(pct,1)}
-                for m in em:
-                    row[m["key"]]=full.get(m["key"],"")
-                _append_partner_csv(row)
-                # Clear partner fields for next entry
+                row={"partner_name":pname,"partner_year":st.session_state.get("p2_py",""),"partner_tier":st.session_state.get("p2_pt",""),"partner_city":st.session_state.get("p2_city",""),"partner_country":st.session_state.get("p2_country",""),"total_score":total,"max_possible":mp,"percentage":round(pct,1)}
+                for m in em: row[m["key"]]=full.get(m["key"],"")
+                _append_csv(row)
                 for k in list(st.session_state.keys()):
                     if k.startswith("p2_"): del st.session_state[k]
-                st.session_state["_p2_submitted"]=True
-                st.rerun()
+                st.session_state["_p2_submitted"]=True; st.rerun()
+
 
 # ═════════════════════════════════════════════════════════════════════════
-# 9. STEP 3 — PARTNER ASSESSMENT (heat map)
+# STEP 3 — PARTNER ASSESSMENT
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Step 3 — Partner Assessment":
-    _brand()
-    st.markdown("## Step 3 — Partner Assessment")
-
-    partners=_load_all_partners()
-    em=_enabled()
-
-    if not partners:
-        st.info("No partners scored yet. Complete **Step 2** to add partners.")
-        st.stop()
-
-    st.markdown(f"**{len(partners)}** partners scored across **{len(em)}** active metrics. Sorted by total score (highest first).")
-
-    # Sort
-    def sk(p):
-        try: return -int(p.get("total_score",0))
-        except: return 0
-    ps=sorted(partners,key=sk)
-
-    # Build HTML heat-map table
+    _brand(); st.markdown("## Step 3 — Partner Assessment")
+    partners=_load_partners(); em=_enabled()
+    if not partners: st.info("No partners scored yet. Complete **Step 2**."); st.stop()
+    st.markdown(f"**{len(partners)}** partners, **{len(em)}** metrics. Sorted highest first.")
+    ps=sorted(partners,key=lambda p:-int(p.get("total_score",0) or 0))
     hdr="<tr><th>Rank</th><th>Partner</th><th>Tier</th>"
-    for m in em:
-        short=m["name"][:20]
-        hdr+=f'<th title="{m["name"]}">{short}</th>'
+    for m in em: hdr+=f'<th title="{m["name"]}">{m["name"][:20]}</th>'
     hdr+="<th>Total</th><th>%</th></tr>"
-
     rows=""
     for ri,p in enumerate(ps,1):
         rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px'>{p.get('partner_name','')}</td><td>{p.get('partner_tier','')}</td>"
         for m in em:
-            raw=p.get(m["key"],"")
-            try: v=int(raw)
+            try: v=int(p.get(m["key"],"") or 0)
             except: v=None
-            if v and 1<=v<=5:
-                rows+=f'<td class="hm{v}">{v}</td>'
-            else:
-                rows+=f'<td style="color:#ccc">—</td>'
-        try: tv=int(p.get("total_score",0))
+            if v and 1<=v<=5: rows+=f'<td class="hm{v}">{v}</td>'
+            else: rows+='<td style="color:#ccc">—</td>'
+        try: tv=int(p.get("total_score",0) or 0)
         except: tv=0
-        try: pv=float(p.get("percentage",0))
+        try: pv=float(p.get("percentage",0) or 0)
         except: pv=0
         rows+=f'<td class="hm-total">{tv}</td><td class="hm-total">{pv:.1f}%</td></tr>'
-
     st.markdown(f'<div style="overflow-x:auto"><table class="hm-tbl"><thead>{hdr}</thead><tbody>{rows}</tbody></table></div>',unsafe_allow_html=True)
-
-    # Download as XLSX
     st.markdown("---")
-    xlsx_bytes = _generate_assessment_xlsx(ps, em)
-    if xlsx_bytes:
-        st.download_button("⬇️  Download as Excel Spreadsheet", xlsx_bytes,
-            "Partner_Assessment.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary")
-    else:
-        st.warning("Install openpyxl for Excel export: `pip install openpyxl`")
+    xb=_gen_xlsx(ps,em)
+    if xb: st.download_button("⬇️  Download Excel",xb,"Partner_Assessment.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",type="primary")
+    if _csv_path().exists(): st.download_button("⬇️  Download CSV",_csv_path().read_text(),"all_partners.csv","text/csv")
 
-    # Also offer CSV
-    if ALL_PARTNERS_CSV.exists():
-        st.download_button("⬇️  Download raw CSV", ALL_PARTNERS_CSV.read_text(),
-            "all_partners.csv", "text/csv")
 
 # ═════════════════════════════════════════════════════════════════════════
-# 10. STEP 4 — PARTNER CLASSIFICATION
+# STEP 4 — PARTNER CLASSIFICATION
 # ═════════════════════════════════════════════════════════════════════════
-else:
-    _brand()
-    st.markdown("## Step 4 — Partner Classification")
-
-    partners = _load_all_partners()
-    em = _enabled()
-    em_keys = {m["key"] for m in em}
-
-    if not partners:
-        st.info("No partners scored yet. Complete **Step 2** first.")
-        st.stop()
-
-    st.markdown("""
-    <div class="info-box">
-        Classify partners into <b>four quadrants</b> based on customizable criteria.
-        Each quadrant is defined by a set of metrics and performance levels
-        (<b>High</b> ≥ 4, <b>Mid</b> = 3, <b>Low</b> ≤ 2, <b>Any</b> = any score &gt; 0).
-        A partner is assigned to the <b>first matching</b> quadrant (checked in order 1 → 4).
-        Partners matching none default to Quadrant 4.
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Load / init config
-    q_config = _load_classification_config()
-    if "q_config" not in st.session_state:
-        st.session_state["q_config"] = q_config
-
+elif page=="Step 4 — Partner Classification":
+    _brand(); st.markdown("## Step 4 — Partner Classification")
+    partners=_load_partners(); em=_enabled(); em_keys={m["key"] for m in em}
+    if not partners: st.info("No partners scored yet. Complete **Step 2** first."); st.stop()
+    st.markdown("""<div class="info-box">Classify partners into <b>four quadrants</b>. Levels: <b>High</b> ≥ 4, <b>Mid</b> = 3, <b>Low</b> ≤ 2, <b>Any</b> = score &gt; 0. First match wins (1 → 4).</div>""",unsafe_allow_html=True)
+    q_config=_load_q_config()
+    if "q_config" not in st.session_state: st.session_state["q_config"]=q_config
     if st.session_state.get("_q_saved"):
-        st.markdown('<div class="toast">✅ Classification criteria saved & applied</div>', unsafe_allow_html=True)
-        st.session_state["_q_saved"] = False
-
-    # ── Quadrant Criteria Editor ──────────────────────────────────────
+        st.markdown('<div class="toast">✅ Classification saved & applied</div>',unsafe_allow_html=True); st.session_state["_q_saved"]=False
     st.markdown("### Define Quadrant Criteria")
-    st.markdown("Select metrics and performance levels for each quadrant. Partners are matched in order (Q1 first).")
-
-    metric_options = ["(none)"] + [m["name"] for m in SCORECARD_METRICS]
-    level_options = ["high", "mid", "low", "any"]
-
-    MAX_CRITERIA_PER_Q = 6
-
-    with st.form("classification_form"):
-        new_config = {}
-        for q_num in (1, 2, 3, 4):
-            ql, qc = QUADRANT_LABELS.get(q_num, (f"Quadrant {q_num}", "#666"))
-            st.markdown(f'<div style="display:flex;align-items:center;margin:18px 0 8px;"><div class="q-badge" style="background:{qc}">{q_num}</div><b style="font-size:1.05rem">{ql}</b></div>', unsafe_allow_html=True)
-            st.caption(QUADRANT_DESCRIPTIONS.get(q_num, ""))
-
-            current = st.session_state["q_config"].get(q_num, [])
-            criteria_list = []
-
-            for ci in range(MAX_CRITERIA_PER_Q):
-                # Pre-fill from current config
-                if ci < len(current):
-                    cur_key, cur_level = current[ci]
-                    cur_metric_name = next((m["name"] for m in SCORECARD_METRICS if m["key"] == cur_key), "(none)")
-                    cur_level_idx = level_options.index(cur_level) if cur_level in level_options else 0
-                else:
-                    cur_metric_name = "(none)"
-                    cur_level_idx = 0
-
-                mc, lc = st.columns([3, 1])
-                with mc:
-                    sel_metric = st.selectbox(
-                        f"Q{q_num} Metric {ci+1}", metric_options,
-                        index=metric_options.index(cur_metric_name) if cur_metric_name in metric_options else 0,
-                        key=f"q{q_num}_m{ci}", label_visibility="collapsed")
-                with lc:
-                    sel_level = st.selectbox(
-                        f"Q{q_num} Level {ci+1}", level_options,
-                        index=cur_level_idx,
-                        key=f"q{q_num}_l{ci}", label_visibility="collapsed")
-
-                if sel_metric != "(none)":
-                    # Resolve to key
-                    mk = next((m["key"] for m in SCORECARD_METRICS if m["name"] == sel_metric), None)
-                    if mk:
-                        criteria_list.append((mk, sel_level))
-
-            new_config[q_num] = criteria_list
-
-        st.markdown("---")
-        _, cc = st.columns([3, 1])
-        with cc:
-            q_submitted = st.form_submit_button("💾  Save & Classify", use_container_width=True, type="primary")
-
-    if q_submitted:
-        st.session_state["q_config"] = new_config
-        _save_classification_config(new_config)
-        st.session_state["_q_saved"] = True
-        st.rerun()
-
-    # ── Run Classification ────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("### Classification Results")
-
-    active_config = st.session_state["q_config"]
-    classification = classify_partners(partners, active_config, em_keys)
-
-    if not classification:
-        st.info("No partners with scores to classify.")
-        st.stop()
-
-    # Group by quadrant
-    by_quadrant = {1: [], 2: [], 3: [], 4: []}
-    for pname, q_num in classification.items():
-        by_quadrant.setdefault(q_num, []).append(pname)
-
-    # Display quadrant cards
-    for q_num in (1, 2, 3, 4):
-        ql, qc = QUADRANT_LABELS.get(q_num, (f"Quadrant {q_num}", "#666"))
-        members = by_quadrant.get(q_num, [])
-        count = len(members)
-
-        # Criteria summary
-        criteria_parts = []
-        for (mk, lvl) in active_config.get(q_num, []):
-            mname = next((m["name"] for m in SCORECARD_METRICS if m["key"] == mk), mk)
-            criteria_parts.append(f"{mname} = <b>{lvl}</b>")
-        crit_html = " &nbsp;·&nbsp; ".join(criteria_parts) if criteria_parts else "<i>No criteria defined</i>"
-
-        partners_html = "".join(f'<span class="q-partner">{n}</span>' for n in members) if members else '<span style="color:#999">No partners matched</span>'
-
-        st.markdown(f"""
-        <div class="q-card" style="border-color:{qc}20; background:{qc}08;">
-            <div style="display:flex;align-items:center;">
-                <div class="q-badge" style="background:{qc}">{q_num}</div>
-                <h4 style="color:{qc}">{ql}</h4>
-                <span style="margin-left:auto;font-size:1.4rem;font-weight:800;color:{qc};font-family:'JetBrains Mono',monospace">{count}</span>
-            </div>
-            <div class="q-criteria">Criteria: {crit_html}</div>
-            <div style="margin-top:10px">{partners_html}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # ── Summary Table ─────────────────────────────────────────────────
+    metric_options=["(none)"]+[m["name"] for m in SCORECARD_METRICS]; level_options=["high","mid","low","any"]; MAX_C=6
+    with st.form("class_form"):
+        new_config={}
+        for qn in(1,2,3,4):
+            ql,qc=Q_LABELS.get(qn,(f"Q{qn}","#666"))
+            st.markdown(f'<div style="display:flex;align-items:center;margin:18px 0 8px;"><div class="q-badge" style="background:{qc}">{qn}</div><b style="font-size:1.05rem">{ql}</b></div>',unsafe_allow_html=True)
+            st.caption(Q_DESCS.get(qn,""))
+            current=st.session_state["q_config"].get(qn,[])
+            crit_list=[]
+            for ci in range(MAX_C):
+                if ci<len(current): cur_key,cur_level=current[ci]; cur_mn=next((m["name"] for m in SCORECARD_METRICS if m["key"]==cur_key),"(none)"); cur_li=level_options.index(cur_level) if cur_level in level_options else 0
+                else: cur_mn="(none)"; cur_li=0
+                mc,lc=st.columns([3,1])
+                with mc: sel_m=st.selectbox(f"Q{qn}M{ci+1}",metric_options,index=metric_options.index(cur_mn) if cur_mn in metric_options else 0,key=f"q{qn}_m{ci}",label_visibility="collapsed")
+                with lc: sel_l=st.selectbox(f"Q{qn}L{ci+1}",level_options,index=cur_li,key=f"q{qn}_l{ci}",label_visibility="collapsed")
+                if sel_m!="(none)":
+                    mk=next((m["key"] for m in SCORECARD_METRICS if m["name"]==sel_m),None)
+                    if mk: crit_list.append((mk,sel_l))
+            new_config[qn]=crit_list
+        st.markdown("---"); _,cc=st.columns([3,1])
+        with cc: q_sub=st.form_submit_button("💾  Save & Classify",use_container_width=True,type="primary")
+    if q_sub:
+        st.session_state["q_config"]=new_config; _save_q_config(new_config); st.session_state["_q_saved"]=True; st.rerun()
+    st.markdown("---"); st.markdown("### Classification Results")
+    ac=st.session_state["q_config"]; classification=classify_partners(partners,ac,em_keys)
+    if not classification: st.info("No partners to classify."); st.stop()
+    by_q={1:[],2:[],3:[],4:[]}
+    for pn,qn in classification.items(): by_q.setdefault(qn,[]).append(pn)
+    for qn in(1,2,3,4):
+        ql,qc=Q_LABELS.get(qn,(f"Q{qn}","#666")); members=by_q.get(qn,[]); cnt=len(members)
+        cp=[]
+        for(mk,lvl) in ac.get(qn,[]):
+            mn=next((m["name"] for m in SCORECARD_METRICS if m["key"]==mk),mk); cp.append(f"{mn} = <b>{lvl}</b>")
+        ch=" &nbsp;·&nbsp; ".join(cp) if cp else "<i>No criteria</i>"
+        ph="".join(f'<span class="q-partner">{n}</span>' for n in members) if members else '<span style="color:#999">None</span>'
+        st.markdown(f'<div class="q-card" style="border-color:{qc}20;background:{qc}08;"><div style="display:flex;align-items:center;"><div class="q-badge" style="background:{qc}">{qn}</div><h4 style="margin:0;color:{qc}">{ql}</h4><span style="margin-left:auto;font-size:1.4rem;font-weight:800;color:{qc};font-family:\'JetBrains Mono\',monospace">{cnt}</span></div><div class="q-criteria">Criteria: {ch}</div><div style="margin-top:10px">{ph}</div></div>',unsafe_allow_html=True)
+    # Table
     st.markdown("### Full Classification Table")
-    tbl = "<table class='hm-tbl'><thead><tr><th>Partner</th><th>Total Score</th><th>%</th><th>Quadrant</th><th>Classification</th></tr></thead><tbody>"
-    # Sort by quadrant then total descending
-    sorted_class = sorted(classification.items(), key=lambda x: (x[1], -next((int(p.get("total_score",0)) for p in partners if p.get("partner_name")==x[0]), 0)))
-    for pname, q_num in sorted_class:
-        p = next((p for p in partners if p.get("partner_name") == pname), {})
-        try: tv = int(p.get("total_score", 0))
-        except: tv = 0
-        try: pv = float(p.get("percentage", 0))
-        except: pv = 0
-        ql, qc = QUADRANT_LABELS.get(q_num, (f"Q{q_num}", "#666"))
-        tbl += f'<tr><td style="text-align:left;padding-left:10px;font-weight:600">{pname}</td><td>{tv}</td><td>{pv:.1f}%</td><td><span class="score-pill" style="background:{qc}">{q_num}</span></td><td style="color:{qc};font-weight:700">{ql}</td></tr>'
-    tbl += "</tbody></table>"
-    st.markdown(tbl, unsafe_allow_html=True)
-
-    # ── Download ──────────────────────────────────────────────────────
+    tbl="<table class='hm-tbl'><thead><tr><th>Partner</th><th>Total</th><th>%</th><th>Q</th><th>Classification</th></tr></thead><tbody>"
+    sc=sorted(classification.items(),key=lambda x:(x[1],-next((int(p.get("total_score",0) or 0) for p in partners if p.get("partner_name")==x[0]),0)))
+    for pn,qn in sc:
+        p=next((p for p in partners if p.get("partner_name")==pn),{})
+        try: tv=int(p.get("total_score",0) or 0)
+        except: tv=0
+        try: pv=float(p.get("percentage",0) or 0)
+        except: pv=0
+        ql,qc=Q_LABELS.get(qn,(f"Q{qn}","#666"))
+        tbl+=f'<tr><td style="text-align:left;padding-left:10px;font-weight:600">{pn}</td><td>{tv}</td><td>{pv:.1f}%</td><td><span class="score-pill" style="background:{qc}">{qn}</span></td><td style="color:{qc};font-weight:700">{ql}</td></tr>'
+    tbl+="</tbody></table>"
+    st.markdown(tbl,unsafe_allow_html=True)
+    # Downloads
     st.markdown("---")
-    # Build XLSX with classification
-    try:
-        import openpyxl as _oxl
-        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    st.download_button("⬇️  Download as JSON",json.dumps(classification,indent=2),"partner_classification.json","application/json")
 
-        wb = _oxl.Workbook()
-        ws = wb.active
-        ws.title = "Partner Classification"
-        hf = PatternFill(start_color="1E2A3A", end_color="1E2A3A", fill_type="solid")
-        hfont = Font(color="FFFFFF", bold=True, size=10)
-        bdr = Border(left=Side(style="thin",color="CCCCCC"),right=Side(style="thin",color="CCCCCC"),
-                     top=Side(style="thin",color="CCCCCC"),bottom=Side(style="thin",color="CCCCCC"))
-        q_fills = {
-            1: PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid"),
-            2: PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
-            3: PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid"),
-            4: PatternFill(start_color="FA7A7A", end_color="FA7A7A", fill_type="solid"),
-        }
-        headers = ["Partner Name", "Total Score", "Percentage", "Quadrant", "Classification"]
-        for ci, h in enumerate(headers, 1):
-            c = ws.cell(1, ci, h); c.fill = hf; c.font = hfont; c.border = bdr; c.alignment = Alignment(horizontal="center")
-        ws.column_dimensions["A"].width = 28
-        ws.column_dimensions["E"].width = 28
-        for ri, (pname, q_num) in enumerate(sorted_class, 2):
-            p = next((p for p in partners if p.get("partner_name") == pname), {})
-            try: tv = int(p.get("total_score", 0))
-            except: tv = 0
-            try: pv = float(p.get("percentage", 0))
-            except: pv = 0
-            ql = QUADRANT_LABELS.get(q_num, (f"Q{q_num}",))[0]
-            ws.cell(ri, 1, pname).border = bdr
-            ws.cell(ri, 2, tv).border = bdr; ws.cell(ri, 2).alignment = Alignment(horizontal="center")
-            pc = ws.cell(ri, 3); pc.value = pv/100; pc.number_format = "0.0%"; pc.border = bdr; pc.alignment = Alignment(horizontal="center")
-            qc = ws.cell(ri, 4, q_num); qc.border = bdr; qc.alignment = Alignment(horizontal="center")
-            qc.fill = q_fills.get(q_num, PatternFill()); qc.font = Font(bold=True)
-            ws.cell(ri, 5, ql).border = bdr
 
-        buf = io.BytesIO(); wb.save(buf)
-        st.download_button("⬇️  Download Classification as Excel", buf.getvalue(),
-            "Partner_Classification.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary")
-    except ImportError:
-        st.warning("Install openpyxl for Excel export.")
+# ═════════════════════════════════════════════════════════════════════════
+# ADMIN — MANAGE USERS
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Admin — Manage Users":
+    _brand(); st.markdown("## Admin — Manage Users & Clients")
+    if not is_admin: st.error("Admin access required."); st.stop()
+    users=_load_users()
 
-    # JSON download
-    st.download_button("⬇️  Download as JSON", json.dumps(classification, indent=2),
-        "partner_classification.json", "application/json")
+    # Toast
+    if st.session_state.get("_admin_saved"):
+        st.markdown('<div class="toast">✅ Changes saved</div>',unsafe_allow_html=True); st.session_state["_admin_saved"]=False
+
+    # Existing users table
+    st.markdown("### Current Users")
+    for uname,udata in users.items():
+        with st.expander(f"{'🔑' if udata['role']=='admin' else '👤'} **{uname}** — {udata['display_name']} ({udata['role']}) {('→ '+udata['tenant']) if udata.get('tenant') else ''}"):
+            if uname=="admin":
+                st.caption("Default admin account. You can change the password below.")
+            # Change password
+            new_pw=st.text_input(f"New password for {uname}",type="password",key=f"adm_pw_{uname}")
+            if st.button(f"Update password",key=f"adm_pwbtn_{uname}"):
+                if new_pw and len(new_pw)>=4:
+                    users[uname]["password_hash"]=_hash_pw(new_pw); _save_users(users)
+                    st.session_state["_admin_saved"]=True; st.rerun()
+                else: st.error("Password must be at least 4 characters.")
+            # Delete (except admin)
+            if uname!="admin":
+                if st.button(f"🗑️ Delete user {uname}",key=f"adm_del_{uname}"):
+                    del users[uname]; _save_users(users)
+                    st.session_state["_admin_saved"]=True; st.rerun()
+
+    # Add new user
+    st.markdown("---")
+    st.markdown("### Add New Client User")
+    st.markdown("Each client user gets a **tenant ID** (e.g. `acme_corp`). This isolates their data completely.")
+    with st.form("add_user_form"):
+        c1,c2=st.columns(2)
+        with c1:
+            new_uname=st.text_input("Username",placeholder="e.g. acme_user")
+            new_display=st.text_input("Display name",placeholder="e.g. Acme Corporation")
+        with c2:
+            new_password=st.text_input("Password",type="password",placeholder="Min 4 characters")
+            new_tenant=st.text_input("Tenant ID",placeholder="e.g. acme_corp (lowercase, no spaces)")
+        new_role=st.radio("Role",["client","admin"],horizontal=True)
+        add_sub=st.form_submit_button("➕ Add User",type="primary")
+
+    if add_sub:
+        errors=[]
+        if not new_uname or len(new_uname)<2: errors.append("Username must be at least 2 characters.")
+        if new_uname in users: errors.append("Username already exists.")
+        if not new_password or len(new_password)<4: errors.append("Password must be at least 4 characters.")
+        if new_role=="client" and (not new_tenant or " " in new_tenant): errors.append("Tenant ID is required for client users (no spaces).")
+        if new_uname and not re.match(r'^[a-zA-Z0-9_]+$', new_uname): errors.append("Username: letters, numbers, underscores only.")
+        if errors:
+            for e in errors: st.error(e)
+        else:
+            tid=new_tenant.lower().strip() if new_tenant else None
+            users[new_uname]={"password_hash":_hash_pw(new_password),"display_name":new_display or new_uname,"role":new_role,"tenant":tid if new_role=="client" else None}
+            _save_users(users)
+            if tid: _tenant_dir(tid)  # create the folder
+            st.session_state["_admin_saved"]=True; st.rerun()
+
+    # Quick overview of tenants
+    st.markdown("---")
+    st.markdown("### Tenant Directories")
+    tenants=_all_tenants()
+    if tenants:
+        for t in tenants:
+            td=_tenant_dir(t)
+            has_criteria=(td/"scoring_criteria.json").exists()
+            has_partners=(td/"all_partners.csv").exists()
+            pc=len(_load_partners(td/"all_partners.csv")) if has_partners else 0
+            st.markdown(f"**{t}** — {'✅ Criteria' if has_criteria else '⚪ No criteria'} · {pc} partners scored")
+    else:
+        st.info("No tenant directories yet. Add a client user above to create one.")
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# ADMIN — ALL CLIENTS OVERVIEW
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Admin — All Clients":
+    _brand(); st.markdown("## Admin — All Clients Overview")
+    if not is_admin: st.error("Admin access required."); st.stop()
+    tenants=_all_tenants()
+    if not tenants: st.info("No clients yet. Create accounts in **Manage Users**."); st.stop()
+
+    # Summary cards
+    total_partners=0; total_tenants=len(tenants)
+    tenant_data={}
+    for t in tenants:
+        td=_tenant_dir(t)
+        ci_path=td/"client_info.json"
+        ci=json.loads(ci_path.read_text()) if ci_path.exists() else {}
+        ps=_load_partners(td/"all_partners.csv")
+        total_partners+=len(ps)
+        tenant_data[t]={"client_info":ci,"partners":ps,"has_criteria":(td/"scoring_criteria.json").exists()}
+
+    c1,c2,c3=st.columns(3)
+    with c1: st.markdown(f'<div class="sum-card"><div class="sum-big">{total_tenants}</div><div class="sum-lbl">Clients</div></div>',unsafe_allow_html=True)
+    with c2: st.markdown(f'<div class="sum-card"><div class="sum-big">{total_partners}</div><div class="sum-lbl">Total Partners</div></div>',unsafe_allow_html=True)
+    with c3:
+        with_criteria=sum(1 for d in tenant_data.values() if d["has_criteria"])
+        st.markdown(f'<div class="sum-card"><div class="sum-big">{with_criteria}/{total_tenants}</div><div class="sum-lbl">Criteria Set</div></div>',unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Per-client detail
+    for t in tenants:
+        td=tenant_data[t]; ci=td["client_info"]; ps=td["partners"]
+        client_name=ci.get("client_name",t)
+        with st.expander(f"🏢 **{client_name}** ({t}) — {len(ps)} partners {'✅' if td['has_criteria'] else '⚪'}"):
+            if ci:
+                c1,c2,c3=st.columns(3)
+                with c1: st.markdown(f"**Contact:** {ci.get('project_manager','—')}")
+                with c2: st.markdown(f"**Email:** {ci.get('email','—')}")
+                with c3: st.markdown(f"**City:** {ci.get('city','—')}, {ci.get('country','—')}")
+
+            if ps:
+                # Mini heat-map for this client
+                sorted_ps=sorted(ps,key=lambda p:-int(p.get("total_score",0) or 0))
+                tbl="<table class='hm-tbl'><thead><tr><th>Partner</th><th>Total</th><th>%</th><th>Grade</th></tr></thead><tbody>"
+                for p in sorted_ps:
+                    try: tv=int(p.get("total_score",0) or 0)
+                    except: tv=0
+                    try: pv=float(p.get("percentage",0) or 0)
+                    except: pv=0
+                    gl,gc=_grade(pv)
+                    tbl+=f'<tr><td style="text-align:left;padding-left:10px">{p.get("partner_name","")}</td><td>{tv}</td><td>{pv:.1f}%</td><td style="color:{gc};font-weight:800">{gl}</td></tr>'
+                tbl+="</tbody></table>"
+                st.markdown(tbl,unsafe_allow_html=True)
+
+                # Download this client's data
+                csv_path=_tenant_dir(t)/"all_partners.csv"
+                if csv_path.exists():
+                    st.download_button(f"⬇️ Download {t} CSV",csv_path.read_text(),f"{t}_partners.csv","text/csv",key=f"dl_{t}")
+            else:
+                st.caption("No partners scored yet.")
+
+    # Cross-client export
+    st.markdown("---")
+    st.markdown("### Cross-Client Export")
+    if st.button("⬇️  Export All Clients to Single Excel",type="primary"):
+        try:
+            import openpyxl
+            from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+            wb=openpyxl.Workbook()
+            first=True
+            for t in tenants:
+                td_info=tenant_data[t]; ps=td_info["partners"]
+                if not ps: continue
+                cn=td_info["client_info"].get("client_name",t)[:31]
+                if first: ws=wb.active; ws.title=cn; first=False
+                else: ws=wb.create_sheet(title=cn)
+                hf=PatternFill(start_color="1E2A3A",end_color="1E2A3A",fill_type="solid")
+                hfont=Font(color="FFFFFF",bold=True,size=10)
+                bdr=Border(left=Side(style="thin",color="CCCCCC"),right=Side(style="thin",color="CCCCCC"),top=Side(style="thin",color="CCCCCC"),bottom=Side(style="thin",color="CCCCCC"))
+                headers=["Partner","Total Score","Percentage","Grade"]
+                for ci_idx,h in enumerate(headers,1):
+                    c=ws.cell(1,ci_idx,h); c.fill=hf; c.font=hfont; c.border=bdr; c.alignment=Alignment(horizontal="center")
+                ws.column_dimensions["A"].width=28
+                sorted_ps=sorted(ps,key=lambda p:-int(p.get("total_score",0) or 0))
+                for ri,p in enumerate(sorted_ps,2):
+                    try: tv=int(p.get("total_score",0) or 0)
+                    except: tv=0
+                    try: pv=float(p.get("percentage",0) or 0)
+                    except: pv=0
+                    gl,_=_grade(pv)
+                    ws.cell(ri,1,p.get("partner_name","")).border=bdr
+                    ws.cell(ri,2,tv).border=bdr; ws.cell(ri,2).alignment=Alignment(horizontal="center")
+                    pc=ws.cell(ri,3); pc.value=pv/100; pc.number_format="0.0%"; pc.border=bdr; pc.alignment=Alignment(horizontal="center")
+                    ws.cell(ri,4,gl).border=bdr; ws.cell(ri,4).alignment=Alignment(horizontal="center")
+            buf=io.BytesIO(); wb.save(buf)
+            st.download_button("📥 Download",buf.getvalue(),"All_Clients_Overview.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except ImportError:
+            st.warning("Install openpyxl for Excel export.")
+
