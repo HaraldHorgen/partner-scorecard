@@ -248,6 +248,143 @@ def _generate_assessment_xlsx(partners, enabled_metrics):
 
 
 # ═════════════════════════════════════════════════════════════════════════
+# CLASSIFICATION ENGINE
+# ═════════════════════════════════════════════════════════════════════════
+
+# Alias map: user-friendly names from the Classification sheet → metric keys
+METRIC_ALIASES = {
+    "total company revenues": "total_revenues",
+    "annual vendor revenues": "annual_revenues",
+    "annual revenues": "annual_revenues",
+    "y-y growth rate": "yoy_revenue_growth",
+    "y-y revenue growth": "yoy_revenue_growth",
+    "year-on-year revenue growth": "yoy_revenue_growth",
+    "net new logo growth": "net_new_logo_revenues",
+    "net-new logo revenues": "net_new_logo_revenues",
+    "# of known competitors": None,  # not in scorecard
+    "your product ranking": None,    # not in scorecard
+}
+# Add all actual metric keys and names as self-references
+for _m in SCORECARD_METRICS:
+    METRIC_ALIASES[_m["key"]] = _m["key"]
+    METRIC_ALIASES[_m["name"].lower()] = _m["key"]
+
+# Default quadrant config from the Classification sheet
+DEFAULT_QUADRANT_CONFIG = {
+    1: [
+        ("total_revenues", "high"),
+        ("annual_revenues", "low"),
+        ("yoy_revenue_growth", "low"),
+    ],
+    2: [
+        ("annual_revenues", "high"),
+        ("yoy_revenue_growth", "high"),
+        ("net_new_logo_revenues", "high"),
+    ],
+    3: [
+        ("annual_revenues", "high"),
+        ("yoy_revenue_growth", "low"),
+        ("net_new_logo_revenues", "mid"),
+    ],
+    4: [
+        ("annual_revenues", "low"),
+        ("yoy_revenue_growth", "low"),
+    ],
+}
+
+CLASSIFICATION_PATH = pathlib.Path("classification_config.json")
+
+def _level_match(score_val, level):
+    """Check if a score value matches a level: high(>=4), mid(==3), low(<=2), any(>0)."""
+    if score_val is None:
+        return False
+    try:
+        v = int(score_val)
+    except (ValueError, TypeError):
+        return False
+    if v == 0:
+        return False
+    if level is None or level == "any":
+        return v > 0
+    if level == "high":
+        return v >= 4
+    if level == "mid":
+        return v == 3
+    if level == "low":
+        return v <= 2
+    return False
+
+def _resolve_metric_key(name_or_key):
+    """Resolve a metric alias/name to a scorecard key, or None if unmapped."""
+    if not name_or_key:
+        return None
+    return METRIC_ALIASES.get(name_or_key.lower().strip())
+
+def classify_partners(partners, quadrant_config, enabled_metric_keys):
+    """
+    Classify partners into quadrants.
+    partners: list of dicts with metric keys → score values
+    quadrant_config: {1: [(metric_key, level), ...], 2: [...], ...}
+    Returns: dict {partner_name: quadrant_number}
+    """
+    results = {}
+    for p in partners:
+        name = p.get("partner_name", "Unknown")
+        try:
+            total = int(p.get("total_score", 0))
+        except (ValueError, TypeError):
+            total = 0
+        if total == 0:
+            continue  # skip partners with no scores
+
+        assigned = None
+        for q_num in sorted(quadrant_config.keys()):
+            criteria = quadrant_config[q_num]
+            match = True
+            for (metric_key, level) in criteria:
+                if metric_key is None:
+                    continue  # skip unmapped metrics
+                if metric_key not in enabled_metric_keys:
+                    continue  # skip disabled metrics
+                score_val = p.get(metric_key)
+                if not _level_match(score_val, level):
+                    match = False
+                    break
+            if match and criteria:  # must have at least one criterion
+                assigned = q_num
+                break
+
+        results[name] = assigned if assigned is not None else max(quadrant_config.keys())
+    return results
+
+def _load_classification_config():
+    if CLASSIFICATION_PATH.exists():
+        try:
+            raw = json.loads(CLASSIFICATION_PATH.read_text())
+            # Convert string keys back to ints
+            return {int(k): [(tuple(item) if isinstance(item, list) else item) for item in v] for k, v in raw.items()}
+        except Exception:
+            pass
+    return DEFAULT_QUADRANT_CONFIG.copy()
+
+def _save_classification_config(config):
+    CLASSIFICATION_PATH.write_text(json.dumps({str(k): v for k, v in config.items()}, indent=2))
+
+QUADRANT_LABELS = {
+    1: ("Strategic / Underperforming", "#2563eb"),
+    2: ("Top Performers", "#1b6e23"),
+    3: ("Growth Potential", "#d4a917"),
+    4: ("Long Tail / At Risk", "#dc4040"),
+}
+QUADRANT_DESCRIPTIONS = {
+    1: "High total revenue but low vendor-specific performance — strategic accounts that need activation",
+    2: "Strong across revenue, growth, and new logos — your best-performing partners",
+    3: "Good revenue but stagnant growth — need targeted programs to reignite",
+    4: "Low revenue and low growth — evaluate ROI of continued investment",
+}
+
+
+# ═════════════════════════════════════════════════════════════════════════
 # 3. PAGE CONFIG & CSS
 # ═════════════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="ChannelPRO — Partner Revenue Optimizer", page_icon="📋", layout="wide")
@@ -296,6 +433,11 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 .hm1{background:#FA7A7A;color:#fff}.hm2{background:#FFFFCC;color:#333}.hm3{background:#FFFFCC;color:#333}
 .hm4{background:#C6EFCE;color:#1b6e23}.hm5{background:#C6EFCE;color:#1b6e23}
 .hm-total{background:#1e2a3a;color:#fff;font-weight:800}
+.q-card{border-radius:12px;padding:18px 22px;margin-bottom:14px;border:2px solid #e2e6ed}
+.q-card h4{margin:0 0 8px;font-size:1rem;font-weight:800}
+.q-badge{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;font-size:1.1rem;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-right:10px}
+.q-partner{display:inline-block;padding:4px 14px;border-radius:8px;margin:3px 4px;font-size:.88rem;font-weight:600;background:#f0f2f7;color:#1e2a3a}
+.q-criteria{font-size:.82rem;color:#5a6a7e;margin-top:6px;line-height:1.6}
 </style>
 """, unsafe_allow_html=True)
 
@@ -310,7 +452,7 @@ if "client_info" not in st.session_state:
         except: st.session_state["client_info"]={}
     else: st.session_state["client_info"]={}
 
-PAGES=["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment"]
+PAGES=["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification"]
 
 # ═════════════════════════════════════════════════════════════════════════
 # 5. SIDEBAR
@@ -324,7 +466,7 @@ with st.sidebar:
         key="nav_radio",label_visibility="collapsed")
     st.session_state["current_page"]=page
     st.markdown("---")
-    if page not in ("Client Intake","Step 3 — Partner Assessment"):
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
     else: chosen_cat="All Metrics"
@@ -614,7 +756,7 @@ elif page=="Step 2 — Score a Partner":
 # ═════════════════════════════════════════════════════════════════════════
 # 9. STEP 3 — PARTNER ASSESSMENT (heat map)
 # ═════════════════════════════════════════════════════════════════════════
-else:
+elif page=="Step 3 — Partner Assessment":
     _brand()
     st.markdown("## Step 3 — Partner Assessment")
 
@@ -673,3 +815,206 @@ else:
     if ALL_PARTNERS_CSV.exists():
         st.download_button("⬇️  Download raw CSV", ALL_PARTNERS_CSV.read_text(),
             "all_partners.csv", "text/csv")
+
+# ═════════════════════════════════════════════════════════════════════════
+# 10. STEP 4 — PARTNER CLASSIFICATION
+# ═════════════════════════════════════════════════════════════════════════
+else:
+    _brand()
+    st.markdown("## Step 4 — Partner Classification")
+
+    partners = _load_all_partners()
+    em = _enabled()
+    em_keys = {m["key"] for m in em}
+
+    if not partners:
+        st.info("No partners scored yet. Complete **Step 2** first.")
+        st.stop()
+
+    st.markdown("""
+    <div class="info-box">
+        Classify partners into <b>four quadrants</b> based on customizable criteria.
+        Each quadrant is defined by a set of metrics and performance levels
+        (<b>High</b> ≥ 4, <b>Mid</b> = 3, <b>Low</b> ≤ 2, <b>Any</b> = any score &gt; 0).
+        A partner is assigned to the <b>first matching</b> quadrant (checked in order 1 → 4).
+        Partners matching none default to Quadrant 4.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Load / init config
+    q_config = _load_classification_config()
+    if "q_config" not in st.session_state:
+        st.session_state["q_config"] = q_config
+
+    if st.session_state.get("_q_saved"):
+        st.markdown('<div class="toast">✅ Classification criteria saved & applied</div>', unsafe_allow_html=True)
+        st.session_state["_q_saved"] = False
+
+    # ── Quadrant Criteria Editor ──────────────────────────────────────
+    st.markdown("### Define Quadrant Criteria")
+    st.markdown("Select metrics and performance levels for each quadrant. Partners are matched in order (Q1 first).")
+
+    metric_options = ["(none)"] + [m["name"] for m in SCORECARD_METRICS]
+    level_options = ["high", "mid", "low", "any"]
+
+    MAX_CRITERIA_PER_Q = 6
+
+    with st.form("classification_form"):
+        new_config = {}
+        for q_num in (1, 2, 3, 4):
+            ql, qc = QUADRANT_LABELS.get(q_num, (f"Quadrant {q_num}", "#666"))
+            st.markdown(f'<div style="display:flex;align-items:center;margin:18px 0 8px;"><div class="q-badge" style="background:{qc}">{q_num}</div><b style="font-size:1.05rem">{ql}</b></div>', unsafe_allow_html=True)
+            st.caption(QUADRANT_DESCRIPTIONS.get(q_num, ""))
+
+            current = st.session_state["q_config"].get(q_num, [])
+            criteria_list = []
+
+            for ci in range(MAX_CRITERIA_PER_Q):
+                # Pre-fill from current config
+                if ci < len(current):
+                    cur_key, cur_level = current[ci]
+                    cur_metric_name = next((m["name"] for m in SCORECARD_METRICS if m["key"] == cur_key), "(none)")
+                    cur_level_idx = level_options.index(cur_level) if cur_level in level_options else 0
+                else:
+                    cur_metric_name = "(none)"
+                    cur_level_idx = 0
+
+                mc, lc = st.columns([3, 1])
+                with mc:
+                    sel_metric = st.selectbox(
+                        f"Q{q_num} Metric {ci+1}", metric_options,
+                        index=metric_options.index(cur_metric_name) if cur_metric_name in metric_options else 0,
+                        key=f"q{q_num}_m{ci}", label_visibility="collapsed")
+                with lc:
+                    sel_level = st.selectbox(
+                        f"Q{q_num} Level {ci+1}", level_options,
+                        index=cur_level_idx,
+                        key=f"q{q_num}_l{ci}", label_visibility="collapsed")
+
+                if sel_metric != "(none)":
+                    # Resolve to key
+                    mk = next((m["key"] for m in SCORECARD_METRICS if m["name"] == sel_metric), None)
+                    if mk:
+                        criteria_list.append((mk, sel_level))
+
+            new_config[q_num] = criteria_list
+
+        st.markdown("---")
+        _, cc = st.columns([3, 1])
+        with cc:
+            q_submitted = st.form_submit_button("💾  Save & Classify", use_container_width=True, type="primary")
+
+    if q_submitted:
+        st.session_state["q_config"] = new_config
+        _save_classification_config(new_config)
+        st.session_state["_q_saved"] = True
+        st.rerun()
+
+    # ── Run Classification ────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### Classification Results")
+
+    active_config = st.session_state["q_config"]
+    classification = classify_partners(partners, active_config, em_keys)
+
+    if not classification:
+        st.info("No partners with scores to classify.")
+        st.stop()
+
+    # Group by quadrant
+    by_quadrant = {1: [], 2: [], 3: [], 4: []}
+    for pname, q_num in classification.items():
+        by_quadrant.setdefault(q_num, []).append(pname)
+
+    # Display quadrant cards
+    for q_num in (1, 2, 3, 4):
+        ql, qc = QUADRANT_LABELS.get(q_num, (f"Quadrant {q_num}", "#666"))
+        members = by_quadrant.get(q_num, [])
+        count = len(members)
+
+        # Criteria summary
+        criteria_parts = []
+        for (mk, lvl) in active_config.get(q_num, []):
+            mname = next((m["name"] for m in SCORECARD_METRICS if m["key"] == mk), mk)
+            criteria_parts.append(f"{mname} = <b>{lvl}</b>")
+        crit_html = " &nbsp;·&nbsp; ".join(criteria_parts) if criteria_parts else "<i>No criteria defined</i>"
+
+        partners_html = "".join(f'<span class="q-partner">{n}</span>' for n in members) if members else '<span style="color:#999">No partners matched</span>'
+
+        st.markdown(f"""
+        <div class="q-card" style="border-color:{qc}20; background:{qc}08;">
+            <div style="display:flex;align-items:center;">
+                <div class="q-badge" style="background:{qc}">{q_num}</div>
+                <h4 style="color:{qc}">{ql}</h4>
+                <span style="margin-left:auto;font-size:1.4rem;font-weight:800;color:{qc};font-family:'JetBrains Mono',monospace">{count}</span>
+            </div>
+            <div class="q-criteria">Criteria: {crit_html}</div>
+            <div style="margin-top:10px">{partners_html}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ── Summary Table ─────────────────────────────────────────────────
+    st.markdown("### Full Classification Table")
+    tbl = "<table class='hm-tbl'><thead><tr><th>Partner</th><th>Total Score</th><th>%</th><th>Quadrant</th><th>Classification</th></tr></thead><tbody>"
+    # Sort by quadrant then total descending
+    sorted_class = sorted(classification.items(), key=lambda x: (x[1], -next((int(p.get("total_score",0)) for p in partners if p.get("partner_name")==x[0]), 0)))
+    for pname, q_num in sorted_class:
+        p = next((p for p in partners if p.get("partner_name") == pname), {})
+        try: tv = int(p.get("total_score", 0))
+        except: tv = 0
+        try: pv = float(p.get("percentage", 0))
+        except: pv = 0
+        ql, qc = QUADRANT_LABELS.get(q_num, (f"Q{q_num}", "#666"))
+        tbl += f'<tr><td style="text-align:left;padding-left:10px;font-weight:600">{pname}</td><td>{tv}</td><td>{pv:.1f}%</td><td><span class="score-pill" style="background:{qc}">{q_num}</span></td><td style="color:{qc};font-weight:700">{ql}</td></tr>'
+    tbl += "</tbody></table>"
+    st.markdown(tbl, unsafe_allow_html=True)
+
+    # ── Download ──────────────────────────────────────────────────────
+    st.markdown("---")
+    # Build XLSX with classification
+    try:
+        import openpyxl as _oxl
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+
+        wb = _oxl.Workbook()
+        ws = wb.active
+        ws.title = "Partner Classification"
+        hf = PatternFill(start_color="1E2A3A", end_color="1E2A3A", fill_type="solid")
+        hfont = Font(color="FFFFFF", bold=True, size=10)
+        bdr = Border(left=Side(style="thin",color="CCCCCC"),right=Side(style="thin",color="CCCCCC"),
+                     top=Side(style="thin",color="CCCCCC"),bottom=Side(style="thin",color="CCCCCC"))
+        q_fills = {
+            1: PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid"),
+            2: PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+            3: PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid"),
+            4: PatternFill(start_color="FA7A7A", end_color="FA7A7A", fill_type="solid"),
+        }
+        headers = ["Partner Name", "Total Score", "Percentage", "Quadrant", "Classification"]
+        for ci, h in enumerate(headers, 1):
+            c = ws.cell(1, ci, h); c.fill = hf; c.font = hfont; c.border = bdr; c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions["A"].width = 28
+        ws.column_dimensions["E"].width = 28
+        for ri, (pname, q_num) in enumerate(sorted_class, 2):
+            p = next((p for p in partners if p.get("partner_name") == pname), {})
+            try: tv = int(p.get("total_score", 0))
+            except: tv = 0
+            try: pv = float(p.get("percentage", 0))
+            except: pv = 0
+            ql = QUADRANT_LABELS.get(q_num, (f"Q{q_num}",))[0]
+            ws.cell(ri, 1, pname).border = bdr
+            ws.cell(ri, 2, tv).border = bdr; ws.cell(ri, 2).alignment = Alignment(horizontal="center")
+            pc = ws.cell(ri, 3); pc.value = pv/100; pc.number_format = "0.0%"; pc.border = bdr; pc.alignment = Alignment(horizontal="center")
+            qc = ws.cell(ri, 4, q_num); qc.border = bdr; qc.alignment = Alignment(horizontal="center")
+            qc.fill = q_fills.get(q_num, PatternFill()); qc.font = Font(bold=True)
+            ws.cell(ri, 5, ql).border = bdr
+
+        buf = io.BytesIO(); wb.save(buf)
+        st.download_button("⬇️  Download Classification as Excel", buf.getvalue(),
+            "Partner_Classification.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary")
+    except ImportError:
+        st.warning("Install openpyxl for Excel export.")
+
+    # JSON download
+    st.download_button("⬇️  Download as JSON", json.dumps(classification, indent=2),
+        "partner_classification.json", "application/json")
