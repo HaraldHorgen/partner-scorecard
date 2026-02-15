@@ -6,6 +6,7 @@ Single instance, per-client data isolation, admin overview.
 """
 import csv, hashlib, io, json, os, pathlib, re, secrets
 import streamlit as st
+import pandas as pd
 
 # ═════════════════════════════════════════════════════════════════════════
 # DATA & AUTH PATHS
@@ -364,6 +365,57 @@ def _save_q_config(config): _class_path().write_text(json.dumps({str(k):v for k,
 Q_LABELS={1:("Strategic / Underperforming","#2563eb"),2:("Top Performers","#1b6e23"),3:("Growth Potential","#d4a917"),4:("Long Tail","#dc4040")}
 Q_DESCS={1:"High total revenue but low vendor-specific performance",2:"Strong across revenue, growth, and new logos",3:"Good revenue but stagnant growth",4:"Does not meet criteria for quadrants 1–3"}
 
+# ═════════════════════════════════════════════════════════════════════════
+# BREAK-EVEN DEFAULTS (from "Nominal break-even" sheet)
+# ═════════════════════════════════════════════════════════════════════════
+BE_SECTIONS = [
+    {"section":"Personnel and Overhead","items":[
+        "Partner managers - salaries and commissions","Social charges","Office space",
+        "Phone, laptop, software","Admin and order processing","Overhead allocation"]},
+    {"section":"Infrastructure and Technology","items":[
+        "PRM and other software used for the channel","Integration with partner systems",
+        "Security for data sharing and privacy regulations"]},
+    {"section":"Marketing and Promotion","items":[
+        "Co-marketing and MDF","SEO and other campaigns","Marketing collateral",
+        "Website maintenance","Incentives - spiffs, rebates, sales contests","Events and conferences"]},
+    {"section":"Technical and Sales Support","items":[
+        "Technical support salaries","Pre-sales support salaries","Social charges",
+        "Office space","Phone, laptop, software","Overhead allocation"]},
+    {"section":"Training and Certification","items":[
+        "Product training","Sales training","Certification programs"]},
+    {"section":"Legal and Compliance","items":[
+        "Contracts","Compliance","Conflict resolution - contract disputes and mediation"]},
+    {"section":"Travel and Meetings","items":[
+        "Face-to-face meetings","Joint sales calls"]},
+    {"section":"Performance Metrics and Reporting","items":[
+        "Partner performance tools salary","Reporting"]},
+    {"section":"Scaling and Expansion","items":[
+        "Partner recruitment manager","Social charges","Office space","Overhead allocation",
+        "Phone, laptop, software","Partner recruitment marketing","Travel and meetings","Onboarding costs"]},
+]
+BE_SECTION_ICONS = {"Personnel and Overhead":"👥","Infrastructure and Technology":"🖥️",
+    "Marketing and Promotion":"📣","Technical and Sales Support":"🛠️",
+    "Training and Certification":"🎓","Legal and Compliance":"⚖️",
+    "Travel and Meetings":"✈️","Performance Metrics and Reporting":"📊",
+    "Scaling and Expansion":"🚀"}
+
+def _be_path(): return _current_data_dir() / "break_even_configs.json"
+def _sd_path(): return _current_data_dir() / "support_data.csv"
+
+def _load_be():
+    p = _be_path()
+    if p.exists():
+        try: return json.loads(p.read_text())
+        except: pass
+    # Build default config with all zeros
+    cfg = {"sections": {}, "num_partners": 0, "support_calls": 0, "avg_min_per_call": 20}
+    for sec in BE_SECTIONS:
+        cfg["sections"][sec["section"]] = {item: 0 for item in sec["items"]}
+    return cfg
+
+def _save_be(cfg):
+    _be_path().write_text(json.dumps(cfg, indent=2))
+
 
 # ═════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG & CSS
@@ -477,7 +529,7 @@ if "current_page" not in st.session_state:
 # ═════════════════════════════════════════════════════════════════════════
 # SIDEBAR (with clickable partner list + PAM filter)
 # ═════════════════════════════════════════════════════════════════════════
-CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification"]
+CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Break-even — Program Costs","Break-even — Detailed Analysis"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
 with st.sidebar:
@@ -516,7 +568,7 @@ with st.sidebar:
     st.markdown("---")
 
     chosen_cat = "All Metrics"
-    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Admin — Manage Users","Admin — All Clients"):
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Break-even — Program Costs","Break-even — Detailed Analysis","Admin — Manage Users","Admin — All Clients"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
     st.markdown("---")
@@ -1068,13 +1120,28 @@ elif page=="Admin — All Clients":
         ci=json.loads((td/"client_info.json").read_text()) if (td/"client_info.json").exists() else {}
         ps=_load_partners(td/"all_partners.csv")
         total_partners+=len(ps)
-        tenant_data[t]={"client_info":ci,"partners":ps,"has_criteria":(td/"scoring_criteria.json").exists()}
+        # Load break-even data if available
+        be_file = td / "break_even_configs.json"
+        be_data = json.loads(be_file.read_text()) if be_file.exists() else None
+        be_total = sum(sum(v for v in items.values()) for items in be_data.get("sections", {}).values()) if be_data else 0
+        be_np = be_data.get("num_partners", 0) if be_data else 0
+        tenant_data[t]={"client_info":ci,"partners":ps,"has_criteria":(td/"scoring_criteria.json").exists(),
+                        "be_data":be_data,"be_total":be_total,"be_np":be_np}
     c1,c2,c3=st.columns(3)
     with c1: st.markdown(f'<div class="sum-card"><div class="sum-big">{len(tenants)}</div><div class="sum-lbl">Clients</div></div>',unsafe_allow_html=True)
     with c2: st.markdown(f'<div class="sum-card"><div class="sum-big">{total_partners}</div><div class="sum-lbl">Total Partners</div></div>',unsafe_allow_html=True)
     with c3:
         wc=sum(1 for d in tenant_data.values() if d["has_criteria"])
         st.markdown(f'<div class="sum-card"><div class="sum-big">{wc}/{len(tenants)}</div><div class="sum-lbl">Criteria Set</div></div>',unsafe_allow_html=True)
+    # Break-even overview row
+    be_clients = sum(1 for d in tenant_data.values() if d["be_data"])
+    if be_clients > 0:
+        total_be = sum(d["be_total"] for d in tenant_data.values())
+        b1, b2, b3 = st.columns(3)
+        with b1: st.metric("Clients w/ Break-even", f"{be_clients}/{len(tenants)}")
+        with b2: st.metric("Total Program Costs (all)", f"${total_be:,.0f}")
+        avg_be = total_be / sum(d["be_np"] for d in tenant_data.values() if d["be_np"] > 0) if any(d["be_np"] > 0 for d in tenant_data.values()) else 0
+        with b3: st.metric("Avg Break-even/Partner", f"${avg_be:,.2f}")
     st.markdown("---")
     for t in tenants:
         td=tenant_data[t]; ci=td["client_info"]; ps=td["partners"]
@@ -1100,6 +1167,15 @@ elif page=="Admin — All Clients":
                 csv_path=_tenant_dir(t)/"all_partners.csv"
                 if csv_path.exists(): st.download_button(f"⬇️ Download {t} CSV",csv_path.read_text(),f"{t}_partners.csv","text/csv",key=f"dl_{t}")
             else: st.caption("No partners scored yet.")
+            # Break-even summary
+            if td.get("be_data"):
+                st.markdown("---")
+                bc1, bc2, bc3 = st.columns(3)
+                with bc1: st.metric("Program Costs", f"${td['be_total']:,.0f}")
+                be_pt = td['be_total'] / td['be_np'] if td['be_np'] > 0 else 0
+                with bc2: st.metric("Break-even/Partner", f"${be_pt:,.2f}")
+                sup_t = sum(td["be_data"].get("sections",{}).get("Technical and Sales Support",{}).values())
+                with bc3: st.metric("Support Costs", f"${sup_t:,.0f}")
     st.markdown("---"); st.markdown("### Cross-Client Export")
     if st.button("⬇️  Export All Clients to Single Excel",type="primary"):
         try:
@@ -1134,4 +1210,416 @@ elif page=="Admin — All Clients":
             buf=io.BytesIO(); wb.save(buf)
             st.download_button("📥 Download",buf.getvalue(),"All_Clients_Overview.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         except ImportError: st.warning("Install openpyxl for Excel export.")
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# BREAK-EVEN — PROGRAM COSTS
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Break-even — Program Costs":
+    _brand(); st.markdown("## Break-even — Program Costs")
+    st.markdown("""<div class="info-box">
+    Enter your annual partner program costs by category. The tool calculates your <b>total program cost</b>
+    and <b>nominal break-even point</b> (cost per partner). For <b>Technical and Sales Support</b>, it also
+    derives cost-per-call and cost-per-minute metrics used in the Detailed Analysis page.</div>""", unsafe_allow_html=True)
+
+    cfg = _load_be()
+    if st.session_state.get("_be_saved"):
+        st.markdown('<div class="toast">✅ Break-even configuration saved</div>', unsafe_allow_html=True)
+        st.session_state["_be_saved"] = False
+
+    # Custom categories in session state
+    if "be_custom" not in st.session_state:
+        st.session_state["be_custom"] = cfg.get("custom_items", {})
+
+    # --- Add custom category UI (outside form) ---
+    with st.expander("➕ Add custom cost category"):
+        ac1, ac2 = st.columns(2)
+        sec_names = [s["section"] for s in BE_SECTIONS] + ["— New section —"]
+        with ac1: add_sec = st.selectbox("Section", sec_names, key="be_add_sec")
+        with ac2:
+            new_sec_name = ""
+            if add_sec == "— New section —":
+                new_sec_name = st.text_input("New section name", key="be_new_sec")
+            add_item = st.text_input("Cost category name", key="be_add_item")
+        if st.button("➕ Add", key="be_add_btn"):
+            target = new_sec_name.strip() if add_sec == "— New section —" else add_sec
+            if target and add_item.strip():
+                custom = st.session_state["be_custom"]
+                if target not in custom: custom[target] = {}
+                custom[target][add_item.strip()] = 0
+                st.rerun()
+
+    # --- Main cost form ---
+    with st.form("be_form"):
+        new_cfg = {"sections": {}, "custom_items": st.session_state.get("be_custom", {})}
+
+        grand_total = 0
+        support_subtotal = 0
+
+        # Iterate default sections + custom-only sections
+        all_sec_names = [s["section"] for s in BE_SECTIONS]
+        custom = st.session_state.get("be_custom", {})
+        for csk in custom:
+            if csk not in all_sec_names: all_sec_names.append(csk)
+
+        for sec_name in all_sec_names:
+            # Find default items
+            default_sec = next((s for s in BE_SECTIONS if s["section"] == sec_name), None)
+            default_items = default_sec["items"] if default_sec else []
+            custom_items = list(custom.get(sec_name, {}).keys())
+            all_items = default_items + [ci for ci in custom_items if ci not in default_items]
+
+            if not all_items: continue
+
+            icon = BE_SECTION_ICONS.get(sec_name, "📁")
+            st.markdown(f'<div class="sec-head">{icon} {sec_name}</div>', unsafe_allow_html=True)
+
+            sec_data = {}; sec_total = 0
+            saved_sec = cfg.get("sections", {}).get(sec_name, {})
+            # Layout: 2 columns of items
+            cols = st.columns(2)
+            for idx, item in enumerate(all_items):
+                saved_val = saved_sec.get(item, custom.get(sec_name, {}).get(item, 0))
+                with cols[idx % 2]:
+                    v = st.number_input(item, min_value=0, value=int(saved_val or 0),
+                                        step=500, key=f"be_{sec_name}_{item}", format="%d")
+                sec_data[item] = v; sec_total += v
+
+            st.markdown(f"**Sub-total: ${sec_total:,.0f}**")
+            new_cfg["sections"][sec_name] = sec_data
+            grand_total += sec_total
+            if sec_name == "Technical and Sales Support":
+                support_subtotal = sec_total
+
+        # --- Global inputs ---
+        st.markdown('<div class="sec-head">🔢 Program Parameters</div>', unsafe_allow_html=True)
+        pc1, pc2, pc3 = st.columns(3)
+        existing_partners = len(_load_partners())
+        with pc1:
+            num_p = st.number_input("Number of partners", min_value=1,
+                value=int(cfg.get("num_partners") or existing_partners or 60), step=1, key="be_num_partners")
+        with pc2:
+            sup_calls = st.number_input("# of support calls (annual)", min_value=0,
+                value=int(cfg.get("support_calls", 0)), step=100, key="be_sup_calls")
+        with pc3:
+            avg_min = st.number_input("Avg minutes per call", min_value=1,
+                value=int(cfg.get("avg_min_per_call", 20)), step=1, key="be_avg_min")
+
+        new_cfg["num_partners"] = num_p
+        new_cfg["support_calls"] = sup_calls
+        new_cfg["avg_min_per_call"] = avg_min
+
+        st.markdown("---")
+        _, bc = st.columns([3, 1])
+        with bc: be_sub = st.form_submit_button("💾 Save Configuration", use_container_width=True, type="primary")
+
+    if be_sub:
+        _save_be(new_cfg); cfg = new_cfg
+        st.session_state["_be_saved"] = True; st.rerun()
+
+    # --- Results dashboard ---
+    st.markdown("---")
+    st.markdown("### 📊 Program Cost Summary")
+
+    # Recalculate from cfg
+    gt = sum(sum(v for v in items.values()) for items in cfg.get("sections", {}).values())
+    np_ = cfg.get("num_partners", 1) or 1
+    be_point = gt / np_
+    sc_ = cfg.get("support_calls", 0) or 0
+    am_ = cfg.get("avg_min_per_call", 20) or 20
+    sup_cost = sum(cfg.get("sections", {}).get("Technical and Sales Support", {}).values())
+    cpc = sup_cost / sc_ if sc_ > 0 else 0
+    cpm = sup_cost / (sc_ * am_) if sc_ > 0 and am_ > 0 else 0
+
+    m1, m2, m3 = st.columns(3)
+    with m1: st.markdown(f'<div class="sum-card"><div class="sum-big">${gt:,.0f}</div><div class="sum-lbl">Total Program Costs</div></div>', unsafe_allow_html=True)
+    with m2: st.markdown(f'<div class="sum-card"><div class="sum-big">{np_}</div><div class="sum-lbl">Number of Partners</div></div>', unsafe_allow_html=True)
+    with m3: st.markdown(f'<div class="sum-card"><div class="sum-big" style="color:#49a34f">${be_point:,.2f}</div><div class="sum-lbl">Break-even per Partner</div></div>', unsafe_allow_html=True)
+
+    if sup_cost > 0:
+        st.markdown("#### 🛠️ Support Cost Metrics")
+        s1, s2, s3, s4 = st.columns(4)
+        with s1: st.metric("Support Costs", f"${sup_cost:,.0f}")
+        with s2: st.metric("# Support Calls", f"{sc_:,}")
+        with s3: st.metric("Cost per Call", f"${cpc:,.2f}")
+        with s4: st.metric("Cost per Minute", f"${cpm:,.4f}")
+
+    # Section breakdown table
+    st.markdown("#### Cost Breakdown by Section")
+    breakdown_rows = ""
+    cfg_sections = list(cfg.get("sections", {}).keys())
+    if not cfg_sections:
+        cfg_sections = [s["section"] for s in BE_SECTIONS]
+    for sec_name in cfg_sections:
+        sec_items = cfg.get("sections", {}).get(sec_name, {})
+        sec_t = sum(sec_items.values())
+        pct = (sec_t / gt * 100) if gt > 0 else 0
+        icon = BE_SECTION_ICONS.get(sec_name, "📁")
+        breakdown_rows += f'<tr><td style="text-align:left;padding-left:10px">{icon} {sec_name}</td><td>${sec_t:,.0f}</td><td>{pct:.1f}%</td></tr>'
+    if gt > 0:
+        breakdown_rows += f'<tr class="hm-total"><td style="text-align:left;padding-left:10px;font-weight:800">TOTAL</td><td style="font-weight:800">${gt:,.0f}</td><td style="font-weight:800">100%</td></tr>'
+    st.markdown(f'<table class="hm-tbl"><thead><tr><th style="text-align:left">Section</th><th>Cost</th><th>% of Total</th></tr></thead><tbody>{breakdown_rows}</tbody></table>', unsafe_allow_html=True)
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# BREAK-EVEN — DETAILED ANALYSIS
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Break-even — Detailed Analysis":
+    _brand(); st.markdown("## Break-even — Detailed Partner Cost Analysis")
+
+    # Load break-even config for cost metrics
+    be_cfg = _load_be()
+    sup_cost = sum(be_cfg.get("sections", {}).get("Technical and Sales Support", {}).values())
+    sc_ = be_cfg.get("support_calls", 0) or 0
+    am_ = be_cfg.get("avg_min_per_call", 20) or 20
+    cpm = sup_cost / (sc_ * am_) if sc_ > 0 and am_ > 0 else 0
+    cpc = sup_cost / sc_ if sc_ > 0 else 0
+
+    if sup_cost == 0:
+        st.warning("⚠️ Complete **Break-even — Program Costs** first to set support cost metrics.")
+
+    st.markdown("""<div class="info-box">
+    Upload a CSV with columns: <b>Partner</b>, <b>Revenues</b>, <b># of calls</b>.
+    Optional: <b>Time spent</b> (minutes). If missing, it will be estimated using your configured average minutes per call.
+    Support cost per partner is calculated using cost-per-minute from your Program Costs configuration.</div>""", unsafe_allow_html=True)
+
+    # Show current cost metrics
+    cm1, cm2, cm3 = st.columns(3)
+    with cm1: st.metric("Cost per Minute", f"${cpm:,.4f}" if cpm > 0 else "Not set")
+    with cm2: st.metric("Cost per Call", f"${cpc:,.2f}" if cpc > 0 else "Not set")
+    with cm3: st.metric("Avg Min/Call", f"{am_}")
+
+    st.markdown("---")
+
+    # Configurable avg minutes per call for this analysis
+    avg_min_override = st.number_input("Average minutes per call (for estimating missing 'Time spent')",
+        min_value=1, value=am_, step=1, key="da_avg_min")
+
+    # File upload
+    uploaded = st.file_uploader("📁 Upload Partner Cost CSV", type=["csv"], key="da_upload")
+
+    # Try loading previously saved data
+    df = None
+    sd_path = _sd_path()
+
+    if uploaded is not None:
+        try:
+            df = pd.read_csv(uploaded)
+        except Exception as e:
+            st.error(f"Error reading CSV: {e}"); df = None
+    elif sd_path.exists():
+        try:
+            df = pd.read_csv(sd_path)
+            st.info("📂 Loaded previously saved analysis data.")
+        except: df = None
+
+    if df is None:
+        st.info("Upload a CSV to begin analysis, or complete one on the Program Costs page first.")
+        st.stop()
+
+    # Validate required columns
+    col_map = {}
+    for col in df.columns:
+        cl = col.strip().lower()
+        if cl in ("partner", "partner name"): col_map["Partner"] = col
+        elif cl in ("revenues", "revenue"): col_map["Revenues"] = col
+        elif cl in ("# of calls", "calls", "number of calls", "#calls"): col_map["Calls"] = col
+        elif cl in ("time spent", "time", "minutes", "time spent (min)"): col_map["Time"] = col
+
+    missing = [c for c in ["Partner", "Revenues", "Calls"] if c not in col_map]
+    if missing:
+        st.error(f"Missing required columns: {', '.join(missing)}. Found: {list(df.columns)}")
+        st.stop()
+
+    # Normalize column names
+    df = df.rename(columns={col_map["Partner"]: "Partner", col_map["Revenues"]: "Revenues", col_map["Calls"]: "# of calls"})
+    if "Time" in col_map:
+        df = df.rename(columns={col_map["Time"]: "Time spent"})
+
+    # Clean numeric columns
+    for c in ["Revenues", "# of calls"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+    if "Time spent" in df.columns:
+        df["Time spent"] = pd.to_numeric(df["Time spent"], errors="coerce").fillna(0)
+    else:
+        df["Time spent"] = df["# of calls"] * avg_min_override
+
+    # Fill missing time using avg
+    df.loc[df["Time spent"] == 0, "Time spent"] = df.loc[df["Time spent"] == 0, "# of calls"] * avg_min_override
+
+    # Sort by revenues descending
+    df = df.sort_values("Revenues", ascending=False).reset_index(drop=True)
+
+    # Calculate percentages and costs
+    total_rev = df["Revenues"].sum()
+    total_calls = df["# of calls"].sum()
+    total_time = df["Time spent"].sum()
+
+    df["% of revenues"] = (df["Revenues"] / total_rev * 100) if total_rev > 0 else 0
+    df["% of calls"] = (df["# of calls"] / total_calls * 100) if total_calls > 0 else 0
+    df["% of support time"] = (df["Time spent"] / total_time * 100) if total_time > 0 else 0
+
+    if cpm > 0:
+        df["Support cost"] = df["Time spent"] * cpm
+    elif cpc > 0:
+        df["Support cost"] = df["# of calls"] * cpc
+    else:
+        df["Support cost"] = 0
+
+    total_support_cost = df["Support cost"].sum()
+    df["% of cost"] = (df["Support cost"] / total_support_cost * 100) if total_support_cost > 0 else 0
+
+    # Save processed data
+    df.to_csv(sd_path, index=False)
+
+    # --- Display results ---
+    st.markdown("### 📊 Analysis Results")
+    rm1, rm2, rm3, rm4 = st.columns(4)
+    with rm1: st.metric("Partners", f"{len(df)}")
+    with rm2: st.metric("Total Revenue", f"${total_rev:,.0f}")
+    with rm3: st.metric("Total Calls", f"{int(total_calls):,}")
+    with rm4: st.metric("Total Support Cost", f"${total_support_cost:,.2f}")
+
+    # Display table
+    st.markdown("### Partner Cost Table")
+    display_df = df[["Partner", "Revenues", "% of revenues", "# of calls", "% of calls",
+                     "Time spent", "% of support time", "Support cost", "% of cost"]].copy()
+
+    # Add totals row
+    totals = pd.DataFrame([{
+        "Partner": "TOTAL", "Revenues": total_rev,
+        "% of revenues": 100.0, "# of calls": total_calls,
+        "% of calls": 100.0, "Time spent": total_time,
+        "% of support time": 100.0, "Support cost": total_support_cost,
+        "% of cost": 100.0
+    }])
+    display_with_totals = pd.concat([display_df, totals], ignore_index=True)
+
+    # Format for display
+    fmt_df = display_with_totals.copy()
+    fmt_df["Revenues"] = fmt_df["Revenues"].apply(lambda x: f"${x:,.0f}")
+    fmt_df["% of revenues"] = fmt_df["% of revenues"].apply(lambda x: f"{x:.1f}%")
+    fmt_df["# of calls"] = fmt_df["# of calls"].apply(lambda x: f"{int(x):,}")
+    fmt_df["% of calls"] = fmt_df["% of calls"].apply(lambda x: f"{x:.1f}%")
+    fmt_df["Time spent"] = fmt_df["Time spent"].apply(lambda x: f"{int(x):,}")
+    fmt_df["% of support time"] = fmt_df["% of support time"].apply(lambda x: f"{x:.1f}%")
+    fmt_df["Support cost"] = fmt_df["Support cost"].apply(lambda x: f"${x:,.2f}")
+    fmt_df["% of cost"] = fmt_df["% of cost"].apply(lambda x: f"{x:.1f}%")
+
+    st.dataframe(fmt_df, use_container_width=True, hide_index=True)
+
+    # Downloads
+    dl1, dl2 = st.columns(2)
+    with dl1:
+        csv_buf = display_with_totals.to_csv(index=False)
+        st.download_button("⬇️ Download CSV", csv_buf, "partner_cost_analysis.csv", "text/csv", type="primary")
+    with dl2:
+        try:
+            import openpyxl
+            from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Partner Costs"
+            hf = PatternFill(start_color="1E2A3A", end_color="1E2A3A", fill_type="solid")
+            hfont = Font(color="FFFFFF", bold=True, size=10)
+            bdr = Border(left=Side(style="thin", color="CCCCCC"), right=Side(style="thin", color="CCCCCC"),
+                         top=Side(style="thin", color="CCCCCC"), bottom=Side(style="thin", color="CCCCCC"))
+            headers = list(display_with_totals.columns)
+            for ci, h in enumerate(headers, 1):
+                c = ws.cell(1, ci, h); c.fill = hf; c.font = hfont; c.border = bdr
+                c.alignment = Alignment(horizontal="center", wrap_text=True)
+                ws.column_dimensions[c.column_letter].width = 16
+            ws.column_dimensions["A"].width = 24
+            for ri, (_, row) in enumerate(display_with_totals.iterrows(), 2):
+                for ci, h in enumerate(headers, 1):
+                    v = row[h]
+                    cell = ws.cell(ri, ci, v); cell.border = bdr
+                    cell.alignment = Alignment(horizontal="center")
+                    if h in ("Revenues", "Support cost") and isinstance(v, (int, float)):
+                        cell.number_format = '#,##0'
+                    elif "%" in h and isinstance(v, (int, float)):
+                        cell.value = v / 100; cell.number_format = "0.0%"
+                    if row["Partner"] == "TOTAL":
+                        cell.font = Font(bold=True)
+            buf = io.BytesIO(); wb.save(buf)
+            st.download_button("⬇️ Download Excel", buf.getvalue(), "partner_cost_analysis.xlsx",
+                              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        except ImportError: pass
+
+    # --- Visualizations ---
+    st.markdown("---")
+    st.markdown("### 📈 Visualizations")
+
+    chart_df = df.head(15).copy()
+    if len(chart_df) > 0 and total_support_cost > 0:
+        import altair as alt
+
+        tab1, tab2, tab3 = st.tabs(["Support Cost vs Revenue", "Cost Distribution", "Cost/Revenue Ratio"])
+
+        with tab1:
+            st.markdown("#### Top Partners: Support Cost vs Revenue")
+            # Melt for grouped bar chart
+            bar_src = chart_df[["Partner", "Revenues", "Support cost"]].copy()
+            bar_src = bar_src.melt(id_vars="Partner", var_name="Metric", value_name="Amount")
+            bar_chart = alt.Chart(bar_src).mark_bar().encode(
+                x=alt.X("Partner:N", sort=list(chart_df["Partner"]), axis=alt.Axis(labelAngle=-45, labelLimit=120)),
+                y=alt.Y("Amount:Q", title="$"),
+                color=alt.Color("Metric:N", scale=alt.Scale(domain=["Revenues","Support cost"], range=["#2563eb","#dc4040"])),
+                xOffset="Metric:N",
+                tooltip=["Partner", "Metric", alt.Tooltip("Amount:Q", format="$,.0f")]
+            ).properties(height=400)
+            st.altair_chart(bar_chart, use_container_width=True)
+
+        with tab2:
+            st.markdown("#### Cost Distribution by Partner")
+            top10 = df.head(10).copy()
+            rest_cost = df.iloc[10:]["Support cost"].sum() if len(df) > 10 else 0
+            pie_src = top10[["Partner", "Support cost"]].copy()
+            if rest_cost > 0:
+                pie_src = pd.concat([pie_src, pd.DataFrame([{"Partner": "Others", "Support cost": rest_cost}])], ignore_index=True)
+            pie_chart = alt.Chart(pie_src).mark_arc(innerRadius=50).encode(
+                theta=alt.Theta("Support cost:Q"),
+                color=alt.Color("Partner:N", legend=alt.Legend(title="Partner")),
+                tooltip=["Partner", alt.Tooltip("Support cost:Q", format="$,.2f")]
+            ).properties(height=400)
+            st.altair_chart(pie_chart, use_container_width=True)
+
+            # Revenue distribution pie
+            st.markdown("#### Revenue Distribution by Partner")
+            rev_src = top10[["Partner", "Revenues"]].copy()
+            rest_rev = df.iloc[10:]["Revenues"].sum() if len(df) > 10 else 0
+            if rest_rev > 0:
+                rev_src = pd.concat([rev_src, pd.DataFrame([{"Partner": "Others", "Revenues": rest_rev}])], ignore_index=True)
+            rev_pie = alt.Chart(rev_src).mark_arc(innerRadius=50).encode(
+                theta=alt.Theta("Revenues:Q"),
+                color=alt.Color("Partner:N", legend=alt.Legend(title="Partner")),
+                tooltip=["Partner", alt.Tooltip("Revenues:Q", format="$,.0f")]
+            ).properties(height=400)
+            st.altair_chart(rev_pie, use_container_width=True)
+
+        with tab3:
+            st.markdown("#### Cost / Revenue Ratio by Partner")
+            ratio_df = chart_df[["Partner", "Revenues", "# of calls", "Support cost"]].copy()
+            ratio_df["Cost/Rev %"] = ratio_df.apply(lambda r: (r["Support cost"] / r["Revenues"] * 100) if r["Revenues"] > 0 else 0, axis=1)
+            ratio_chart = alt.Chart(ratio_df).mark_bar().encode(
+                x=alt.X("Partner:N", sort=list(chart_df["Partner"]), axis=alt.Axis(labelAngle=-45, labelLimit=120)),
+                y=alt.Y("Cost/Rev %:Q", title="Support Cost as % of Revenue"),
+                color=alt.condition(
+                    alt.datum["Cost/Rev %"] > 10, alt.value("#dc4040"),
+                    alt.condition(alt.datum["Cost/Rev %"] > 5, alt.value("#d4a917"), alt.value("#1b6e23"))
+                ),
+                tooltip=["Partner", alt.Tooltip("Revenues:Q", format="$,.0f"),
+                         alt.Tooltip("Support cost:Q", format="$,.2f"),
+                         alt.Tooltip("Cost/Rev %:Q", format=".1f")]
+            ).properties(height=400)
+            st.altair_chart(ratio_chart, use_container_width=True)
+
+            # Table view
+            st.markdown("##### Detail")
+            tbl_html = '<table class="hm-tbl"><thead><tr><th style="text-align:left">Partner</th><th>Revenue</th><th>Calls</th><th>Support Cost</th><th>Cost/Rev %</th></tr></thead><tbody>'
+            for _, r in ratio_df.iterrows():
+                rc = "#dc4040" if r["Cost/Rev %"] > 10 else "#d4a917" if r["Cost/Rev %"] > 5 else "#1b6e23"
+                tbl_html += f'<tr><td style="text-align:left;padding-left:10px">{r["Partner"]}</td><td>${r["Revenues"]:,.0f}</td><td>{int(r["# of calls"]):,}</td><td>${r["Support cost"]:,.2f}</td><td style="color:{rc};font-weight:700">{r["Cost/Rev %"]:.1f}%</td></tr>'
+            tbl_html += '</tbody></table>'
+            st.markdown(tbl_html, unsafe_allow_html=True)
+    else:
+        st.info("Add support cost data in Program Costs and upload partner data to see visualizations.")
 
