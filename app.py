@@ -279,6 +279,37 @@ def _delete_partner(partner_name):
 def _partner_exists(name):
     return any(p.get("partner_name","").strip().lower() == name.strip().lower() for p in _load_partners())
 
+def _upsert_partner(row_dict, raw_dict):
+    """Create or update a partner. If name exists, replace; else append."""
+    pn = row_dict.get("partner_name","").strip()
+    if not pn: return
+    # Remove existing if present (from both CSV and raw)
+    existing = _load_partners()
+    if any(p.get("partner_name","").strip().lower() == pn.lower() for p in existing):
+        _delete_partner(pn)
+    _append_partner(row_dict, raw_dict)
+
+def _synthetic_raw_for_score(mk, score, cr=None):
+    """Given a metric key and desired score (1-5), return a raw value that calc_score would map to that score."""
+    if score is None or score == 0: return None
+    criteria = cr or st.session_state.get("criteria",{})
+    mc = criteria.get(mk)
+    if not mc: return str(score)
+    if mc["type"] == "qualitative":
+        # Return the descriptor text for that score level
+        return mc.get("descriptors",{}).get(str(score),"")
+    else:
+        # Quantitative — pick a value in the middle of the range
+        r = mc.get("ranges",{}).get(str(score),{})
+        lo, hi = _sf(r.get("min")), _sf(r.get("max"))
+        if lo is not None and hi is not None:
+            return str((lo + hi) / 2)
+        elif lo is not None:
+            return str(lo + 1)  # just above minimum
+        elif hi is not None:
+            return str(hi)
+        return str(score)
+
 
 def _gen_xlsx(partners, enabled_metrics):
     try:
@@ -529,7 +560,7 @@ if "current_page" not in st.session_state:
 # ═════════════════════════════════════════════════════════════════════════
 # SIDEBAR (with clickable partner list + PAM filter)
 # ═════════════════════════════════════════════════════════════════════════
-CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Break-even — Program Costs","Break-even — Detailed Analysis"]
+CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Break-even — Program Costs","Break-even — Detailed Analysis"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
 with st.sidebar:
@@ -568,7 +599,7 @@ with st.sidebar:
     st.markdown("---")
 
     chosen_cat = "All Metrics"
-    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Break-even — Program Costs","Break-even — Detailed Analysis","Admin — Manage Users","Admin — All Clients"):
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Break-even — Program Costs","Break-even — Detailed Analysis","Admin — Manage Users","Admin — All Clients"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
     st.markdown("---")
@@ -1040,6 +1071,381 @@ elif page=="Step 4 — Partner Classification":
         st.download_button("⬇️  Download CSV", csv_buf.getvalue(), "Partner_Classification.csv", "text/csv")
     with dl3:
         st.download_button("⬇️  Download JSON", json.dumps(classification, indent=2), "partner_classification.json", "application/json")
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# IMPORT DATA — CSV upload + column mapping → batch partner creation
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Import Data":
+    _brand(); st.markdown("## Import Partner Data from CSV")
+    if not _save_path().exists():
+        st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first so metrics are available for mapping."); st.stop()
+    st.session_state["criteria"] = json.loads(_save_path().read_text())
+    cr = st.session_state["criteria"]; em = _enabled()
+
+    st.markdown("""<div class="info-box">
+    Upload a CSV exported from your CRM, ERP, or PRM system. Map its columns to ChannelPRO scoring metrics
+    and import partners in bulk. Existing partners (matched by name) will be <b>updated</b>; new names will
+    be <b>created</b>. Unmapped metrics are left blank for manual scoring later.</div>""", unsafe_allow_html=True)
+
+    # Show import results from previous run
+    if st.session_state.get("_import_done"):
+        res = st.session_state.pop("_import_done")
+        st.markdown(f'<div class="toast">✅ Import complete — {res["created"]} created, {res["updated"]} updated, {res["errors"]} errors</div>', unsafe_allow_html=True)
+
+    uploaded = st.file_uploader("📁 Upload CSV file", type=["csv"], key="import_csv")
+    if uploaded is None:
+        st.info("Upload a CSV to get started. Required column: **Partner** (name or ID)."); st.stop()
+
+    # Parse CSV
+    try:
+        df = pd.read_csv(uploaded)
+    except Exception as e:
+        st.error(f"Could not read CSV: {e}"); st.stop()
+    if df.empty:
+        st.error("The uploaded CSV is empty."); st.stop()
+
+    csv_cols = list(df.columns)
+    st.markdown("### 📄 CSV Preview (first 5 rows)")
+    st.dataframe(df.head(5), use_container_width=True, hide_index=True)
+    st.caption(f"{len(df)} rows × {len(csv_cols)} columns")
+
+    # ── Mapping interface ──
+    st.markdown("---")
+    st.markdown("### 🔗 Column Mapping")
+    none_opt = ["— None —"]
+
+    # Helper: find best auto-match for a label among CSV columns
+    def _auto_match(label, cols):
+        ll = label.lower()
+        for c in cols:
+            if c.lower().strip() == ll: return c
+        for c in cols:
+            if ll in c.lower() or c.lower() in ll: return c
+        return None
+
+    # ── Required: Partner name column ──
+    st.markdown('<div class="sec-head">🏢 Required</div>', unsafe_allow_html=True)
+    auto_pn = _auto_match("partner", csv_cols) or _auto_match("partner name", csv_cols) or _auto_match("company", csv_cols)
+    partner_col = st.selectbox("Partner name column **(required)**",
+        csv_cols, index=csv_cols.index(auto_pn) if auto_pn else 0, key="imp_partner_col")
+
+    # ── Optional: partner detail fields ──
+    st.markdown('<div class="sec-head">📇 Partner Details (optional)</div>', unsafe_allow_html=True)
+    detail_fields = [
+        ("Year became partner", "partner_year", ["year","since","partner year","start year"]),
+        ("Tier", "partner_tier", ["tier","level","designation"]),
+        ("City", "partner_city", ["city"]),
+        ("Country", "partner_country", ["country"]),
+        ("PAM name", "pam_name", ["pam","pam name","account manager","partner manager"]),
+        ("PAM email", "pam_email", ["pam email","manager email"]),
+    ]
+    dc1, dc2, dc3 = st.columns(3)
+    detail_mapping = {}
+    for i, (label, field, hints) in enumerate(detail_fields):
+        auto = None
+        for h in hints:
+            auto = _auto_match(h, csv_cols)
+            if auto: break
+        col_widget = [dc1, dc2, dc3][i % 3]
+        with col_widget:
+            sel = st.selectbox(label, none_opt + csv_cols,
+                index=(csv_cols.index(auto) + 1) if auto and auto in csv_cols else 0,
+                key=f"imp_det_{field}")
+        if sel != "— None —":
+            detail_mapping[field] = sel
+
+    # ── Metric mapping ──
+    st.markdown('<div class="sec-head">📊 Scoring Metrics</div>', unsafe_allow_html=True)
+    st.caption("Map CSV columns to each metric. For quantitative metrics, the raw value from CSV will be auto-scored using your Step 1 ranges.")
+    metric_mapping = {}
+    mc1, mc2 = st.columns(2)
+    for idx, m in enumerate(em):
+        auto = _auto_match(m["name"], csv_cols)
+        col_widget = mc1 if idx % 2 == 0 else mc2
+        with col_widget:
+            mtype = "📏" if m["type"] == "quantitative" else "📝"
+            sel = st.selectbox(f'{mtype} {m["name"]}', none_opt + csv_cols,
+                index=(csv_cols.index(auto) + 1) if auto and auto in csv_cols else 0,
+                key=f"imp_m_{m['key']}")
+        if sel != "— None —":
+            metric_mapping[m["key"]] = sel
+
+    # Summary
+    st.markdown("---")
+    mapped_count = len(metric_mapping)
+    st.markdown(f"**Mapped:** {mapped_count}/{len(em)} metrics  •  Partner column: **{partner_col}**")
+    if mapped_count == 0:
+        st.caption("ℹ️ No metrics mapped — partners will be created with blank scores for manual entry.")
+
+    # ── Process import ──
+    st.markdown("---")
+    _, _, btn_col = st.columns([2, 2, 1])
+    with btn_col:
+        do_import = st.button("📥  Import Partners", use_container_width=True, type="primary")
+
+    if do_import:
+        created = 0; updated = 0; error_rows = []
+        existing_names = {p.get("partner_name","").strip().lower() for p in _load_partners()}
+        progress = st.progress(0, text="Importing...")
+
+        for row_idx, row in df.iterrows():
+            progress.progress(min((row_idx + 1) / len(df), 1.0), text=f"Processing row {row_idx + 1}/{len(df)}...")
+            pname = str(row.get(partner_col, "")).strip()
+            if not pname or pname.lower() in ("nan", "none", ""):
+                error_rows.append({"row": row_idx + 2, "partner": pname, "error": "Missing partner name"})
+                continue
+
+            # Build raw dict
+            raw_dict = {"partner_name": pname}
+            for field, csv_col in detail_mapping.items():
+                raw_dict[field] = str(row.get(csv_col, "")).strip()
+                if raw_dict[field].lower() == "nan": raw_dict[field] = ""
+
+            # Build scored dict
+            row_dict = {"partner_name": pname}
+            for field in ["partner_year","partner_tier","partner_city","partner_country","pam_name","pam_email"]:
+                row_dict[field] = raw_dict.get(field, "")
+
+            scores = {}; raw_vals = {}
+            for m in em:
+                mk = m["key"]
+                if mk in metric_mapping:
+                    raw_val = row.get(metric_mapping[mk])
+                    if pd.isna(raw_val) or str(raw_val).strip().lower() in ("", "nan", "none", "n/a"):
+                        raw_vals[mk] = None; scores[mk] = None
+                    else:
+                        raw_str = str(raw_val).strip()
+                        raw_vals[mk] = raw_str
+                        raw_dict[f"raw_{mk}"] = raw_str
+                        scr = calc_score(mk, raw_str, cr)
+                        scores[mk] = scr
+                        row_dict[mk] = scr if scr else ""
+                else:
+                    raw_vals[mk] = None; scores[mk] = None
+                    row_dict[mk] = ""
+
+            # Calculate totals
+            si = {k: v for k, v in scores.items() if v is not None}
+            total = sum(si.values()); sn = len(si); mp = sn * 5
+            pct = round(total / mp * 100, 1) if mp else 0
+            row_dict["total_score"] = total
+            row_dict["max_possible"] = mp
+            row_dict["percentage"] = pct
+
+            # Upsert
+            try:
+                is_update = pname.strip().lower() in existing_names
+                _upsert_partner(row_dict, raw_dict)
+                if is_update:
+                    updated += 1
+                else:
+                    created += 1
+                    existing_names.add(pname.strip().lower())
+            except Exception as e:
+                error_rows.append({"row": row_idx + 2, "partner": pname, "error": str(e)})
+
+        progress.empty()
+
+        # Show results
+        st.session_state["_import_done"] = {"created": created, "updated": updated, "errors": len(error_rows)}
+
+        st.markdown("### ✅ Import Results")
+        r1, r2, r3 = st.columns(3)
+        with r1: st.metric("Created", created)
+        with r2: st.metric("Updated", updated)
+        with r3: st.metric("Errors", len(error_rows))
+
+        if error_rows:
+            st.markdown("#### ⚠️ Errors")
+            err_df = pd.DataFrame(error_rows)
+            st.dataframe(err_df, use_container_width=True, hide_index=True)
+            st.download_button("⬇️ Download Errors CSV", err_df.to_csv(index=False),
+                "import_errors.csv", "text/csv")
+
+        if created > 0 or updated > 0:
+            st.success(f"Successfully imported **{created + updated}** partners. View them on the **Partner List** page or in **Step 3**.")
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# PARTNER LIST — sortable table + inline edit + manual add
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Partner List":
+    _brand(); st.markdown("## Partner List")
+    if not _save_path().exists():
+        st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first."); st.stop()
+    st.session_state["criteria"] = json.loads(_save_path().read_text())
+    cr = st.session_state["criteria"]; em = _enabled()
+    partners = _load_partners()
+
+    # ── Edit mode (single partner) ──
+    edit_pn = st.session_state.get("_pl_edit")
+    if edit_pn:
+        raw_all = _load_raw()
+        raw_p = next((r for r in raw_all if r.get("partner_name") == edit_pn), None)
+        csv_p = next((p for p in partners if p.get("partner_name") == edit_pn), None)
+        if not csv_p:
+            st.error(f"Partner '{edit_pn}' not found."); st.session_state.pop("_pl_edit", None); st.rerun()
+
+        if st.button("← Back to Partner List", key="pl_back"):
+            st.session_state.pop("_pl_edit", None); st.rerun()
+
+        st.markdown(f"### ✏️ Edit Scorecard — {edit_pn}")
+
+        # Show save confirmation
+        if st.session_state.get("_pl_edit_saved"):
+            st.markdown('<div class="toast">✅ Partner scorecard updated</div>', unsafe_allow_html=True)
+            st.session_state["_pl_edit_saved"] = False
+
+        with st.form("pl_edit_form"):
+            # Partner details
+            st.markdown('<div class="sec-head">📇 Partner Details</div>', unsafe_allow_html=True)
+            d1, d2, d3 = st.columns(3)
+            with d1:
+                ed_name = st.text_input("Partner name", value=edit_pn, key="ple_name", disabled=True)
+                ed_year = st.text_input("Year became partner", value=csv_p.get("partner_year",""), key="ple_year")
+            with d2:
+                tiers = _tiers(); t_opts = [""] + tiers if tiers else [""]
+                cur_tier = csv_p.get("partner_tier","")
+                ed_tier = st.selectbox("Tier", t_opts, index=t_opts.index(cur_tier) if cur_tier in t_opts else 0, key="ple_tier")
+                ed_city = st.text_input("City", value=csv_p.get("partner_city",""), key="ple_city")
+            with d3:
+                cur_country = csv_p.get("partner_country","")
+                ed_country = st.selectbox("Country", COUNTRIES, index=COUNTRIES.index(cur_country) if cur_country in COUNTRIES else 0, key="ple_country")
+                ed_pam = st.text_input("PAM name", value=csv_p.get("pam_name",""), key="ple_pam")
+            ed_pam_email = st.text_input("PAM email", value=csv_p.get("pam_email",""), key="ple_pam_email")
+
+            # Metric scores
+            st.markdown('<div class="sec-head">📊 Metric Scores (0 = not scored, 1–5 = score)</div>', unsafe_allow_html=True)
+            edit_scores = {}
+            for cat in CATEGORIES:
+                cat_metrics = [m for m in em if m["key"] in cat["keys"]]
+                if not cat_metrics: continue
+                st.markdown(f"**{cat['icon']} {cat['label']}**")
+                cols = st.columns(min(len(cat_metrics), 3))
+                for mi, m in enumerate(cat_metrics):
+                    mk = m["key"]
+                    try: cur_score = int(csv_p.get(mk, 0) or 0)
+                    except: cur_score = 0
+                    with cols[mi % len(cols)]:
+                        sc = st.number_input(m["name"], min_value=0, max_value=5, value=cur_score,
+                            step=1, key=f"ple_s_{mk}",
+                            help=f"{m['explanation']}  •  {'Quantitative' if m['type']=='quantitative' else 'Qualitative'}")
+                    edit_scores[mk] = sc
+
+            st.markdown("---")
+            _, save_col = st.columns([3, 1])
+            with save_col:
+                edit_sub = st.form_submit_button("💾  Save Changes", use_container_width=True, type="primary")
+
+        if edit_sub:
+            # Build updated raw dict and row dict
+            new_raw = {"partner_name": edit_pn, "partner_year": ed_year, "partner_tier": ed_tier,
+                       "partner_city": ed_city, "partner_country": ed_country,
+                       "pam_name": ed_pam, "pam_email": ed_pam_email}
+            new_row = dict(new_raw)  # start with same detail fields
+            si = {}
+            for m in em:
+                mk = m["key"]; sc = edit_scores.get(mk, 0)
+                if sc and 1 <= sc <= 5:
+                    # Generate a synthetic raw value so _rescore_all works
+                    new_raw[f"raw_{mk}"] = _synthetic_raw_for_score(mk, sc, cr)
+                    new_row[mk] = sc; si[mk] = sc
+                else:
+                    new_raw[f"raw_{mk}"] = None
+                    new_row[mk] = ""
+            total = sum(si.values()); sn = len(si); mp = sn * 5
+            new_row["total_score"] = total; new_row["max_possible"] = mp
+            new_row["percentage"] = round(total / mp * 100, 1) if mp else 0
+            _upsert_partner(new_row, new_raw)
+            st.session_state["_pl_edit_saved"] = True; st.rerun()
+
+    else:
+        # ── Partner table view ──
+        if st.session_state.get("_pl_added"):
+            st.markdown('<div class="toast">✅ New partner created</div>', unsafe_allow_html=True)
+            st.session_state["_pl_added"] = False
+
+        if not partners:
+            st.info("No partners yet. Use **Import Data** to bulk-import or add one manually below.")
+        else:
+            # Build display dataframe
+            tbl_data = []
+            for p in sorted(partners, key=lambda x: -int(x.get("total_score", 0) or 0)):
+                try: pct = float(p.get("percentage", 0) or 0)
+                except: pct = 0
+                gl, gc = _grade(pct)
+                try: ts = int(p.get("total_score", 0) or 0)
+                except: ts = 0
+                tbl_data.append({
+                    "Partner": p.get("partner_name",""),
+                    "Tier": p.get("partner_tier",""),
+                    "PAM": p.get("pam_name",""),
+                    "City": p.get("partner_city",""),
+                    "Total Score": ts,
+                    "Percentage": f"{pct:.1f}%",
+                    "Grade": gl,
+                })
+
+            st.dataframe(pd.DataFrame(tbl_data), use_container_width=True, hide_index=True,
+                column_config={
+                    "Partner": st.column_config.TextColumn(width="large"),
+                    "Total Score": st.column_config.NumberColumn(format="%d"),
+                })
+
+            # Edit / Delete controls
+            st.markdown("---")
+            st.markdown("### ✏️ Edit or Delete a Partner")
+            partner_names = sorted([p.get("partner_name","") for p in partners])
+            sel_partner = st.selectbox("Select partner", partner_names, key="pl_sel_partner")
+            ec1, ec2 = st.columns(2)
+            with ec1:
+                if st.button("✏️  Edit Scorecard", use_container_width=True, type="primary", key="pl_edit_btn"):
+                    st.session_state["_pl_edit"] = sel_partner; st.rerun()
+            with ec2:
+                if st.button("🗑️  Delete Partner", use_container_width=True, key="pl_del_btn"):
+                    _delete_partner(sel_partner); st.rerun()
+
+        # ── Manual add ──
+        st.markdown("---")
+        st.markdown("### ➕ Add New Partner")
+        with st.form("pl_add_form"):
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                new_name = st.text_input("Partner name *", key="pla_name", placeholder="e.g. Acme Corp")
+            with a2:
+                new_year = st.text_input("Year became partner", key="pla_year", placeholder="e.g. 2022")
+            with a3:
+                tiers = _tiers(); t_opts = ["Please choose..."] + tiers if tiers else ["Please choose..."]
+                new_tier = st.selectbox("Tier", t_opts, key="pla_tier")
+            a4, a5, a6 = st.columns(3)
+            with a4: new_city = st.text_input("City", key="pla_city")
+            with a5:
+                new_country = st.selectbox("Country", COUNTRIES, key="pla_country")
+            with a6: new_pam = st.text_input("PAM name", key="pla_pam")
+
+            _, add_col = st.columns([3, 1])
+            with add_col:
+                add_sub = st.form_submit_button("➕  Add Partner", use_container_width=True, type="primary")
+
+        if add_sub:
+            if not new_name or not new_name.strip():
+                st.error("Partner name is required.")
+            elif _partner_exists(new_name):
+                st.error(f"A partner named **{new_name}** already exists.")
+            else:
+                row = {"partner_name": new_name.strip(), "partner_year": new_year,
+                       "partner_tier": new_tier if new_tier != "Please choose..." else "",
+                       "partner_city": new_city, "partner_country": new_country,
+                       "pam_name": new_pam, "pam_email": "",
+                       "total_score": 0, "max_possible": 0, "percentage": 0}
+                for m in em: row[m["key"]] = ""
+                raw = {"partner_name": new_name.strip(), "partner_year": new_year,
+                       "partner_tier": new_tier if new_tier != "Please choose..." else "",
+                       "partner_city": new_city, "partner_country": new_country,
+                       "pam_name": new_pam, "pam_email": ""}
+                _append_partner(row, raw)
+                st.session_state["_pl_added"] = True; st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
