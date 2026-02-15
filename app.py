@@ -188,7 +188,9 @@ def _logo():
     st.markdown(f'<img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;margin-bottom:8px;">',unsafe_allow_html=True)
 
 def _brand():
-    st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div></div>',unsafe_allow_html=True)
+    logo_url = st.session_state.get("client_info",{}).get("logo_url","")
+    right_logo = f'<img src="{logo_url}" style="max-height:50px;border-radius:6px;" onerror="this.style.display=\'none\'">' if logo_url else ''
+    st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div><div style="margin-left:auto;">{right_logo}</div></div>',unsafe_allow_html=True)
 
 # ─── Raw-value storage for re-scoring ────────────────────────────────
 def _save_raw(partner_raw):
@@ -399,7 +401,10 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 [data-testid="stAppViewContainer"] input[type="text"]:focus,[data-testid="stAppViewContainer"] textarea:focus{background:#fff!important;border-color:#2563eb!important}
 .hm-tbl{width:100%;border-collapse:collapse;font-size:.82rem;background:#fff;margin:1rem 0}
 .hm-tbl th{background:#1e2a3a;color:#fff;padding:8px 6px;text-align:center;font-weight:700;font-size:.72rem;text-transform:uppercase;white-space:nowrap;border:1px solid #2a3d57}
+.hm-tbl th.hm-diag{white-space:nowrap;vertical-align:bottom;height:140px;padding:0 4px 8px;width:36px;min-width:36px}
+.hm-tbl th.hm-diag > div{transform:rotate(-55deg);transform-origin:bottom left;width:1.8em;margin-left:12px}
 .hm-tbl td{padding:6px;text-align:center;border:1px solid #e2e6ed;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:.82rem}
+.scroll-tbl{overflow-x:auto;overflow-y:auto;max-height:80vh;border:1px solid #e2e6ed;border-radius:10px}
 .hm1{background:#FA7A7A;color:#fff}.hm2{background:#FFFFCC;color:#333}.hm3{background:#FFFFCC;color:#333}
 .hm4{background:#C6EFCE;color:#1b6e23}.hm5{background:#C6EFCE;color:#1b6e23}
 .hm-total{background:#1e2a3a;color:#fff;font-weight:800}
@@ -540,9 +545,14 @@ with st.sidebar:
                     try: pct = float(p.get("percentage",0) or 0)
                     except: pct = 0
                     gl, gc = _grade(pct)
-                    c1, c2 = st.columns([4,1])
-                    with c1: st.markdown(f"**{pn}** — <span style='color:{gc};font-weight:700'>{gl}</span>", unsafe_allow_html=True)
-                    with c2:
+                    c1, c2, c3 = st.columns([3,1,1])
+                    with c1:
+                        if st.button(f"📋 {pn}", key=f"sb_view_{pn}", help=f"View scorecard for {pn}", use_container_width=True):
+                            st.session_state["_view_partner"] = pn
+                            st.session_state["current_page"] = "Step 2 — Score a Partner"
+                            st.rerun()
+                    with c2: st.markdown(f"<span style='color:{gc};font-weight:700;font-size:.85rem'>{gl}</span>", unsafe_allow_html=True)
+                    with c3:
                         if st.button("🗑️", key=f"sb_del_{pn}", help=f"Delete {pn}"):
                             _delete_partner(pn)
                             st.rerun()
@@ -693,33 +703,41 @@ elif page=="Step 1 — Scoring Criteria":
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Step 2 — Score a Partner":
     _brand()
-    # Show company logo if available
-    logo_url = st.session_state.get("client_info",{}).get("logo_url","")
-    if logo_url:
-        st.markdown(f'<img src="{logo_url}" style="max-height:60px;margin-bottom:12px;border-radius:6px;" onerror="this.style.display=\'none\'">',unsafe_allow_html=True)
     st.markdown("## Step 2 — Score a Partner")
     if not _save_path().exists():
         st.warning("⚠️ Complete **Step 1** first."); st.stop()
     st.session_state["criteria"]=json.loads(_save_path().read_text())
     cr=st.session_state["criteria"]; em=_enabled(); mx=len(em)*5
+    # Form version counter — incremented on submit to clear all fields
+    if "p2_ver" not in st.session_state: st.session_state["p2_ver"]=0
+    fv=st.session_state["p2_ver"]
+    # View mode: if a partner was clicked in sidebar
+    view_pn = st.session_state.pop("_view_partner", None)
+    view_raw = None
+    if view_pn:
+        raw_all = _load_raw()
+        view_raw = next((r for r in raw_all if r.get("partner_name") == view_pn), None)
+        if view_raw:
+            st.info(f"📋 Viewing scorecard for **{view_pn}** (read-only)")
     if st.session_state.get("_p2_submitted"):
         st.markdown('<div class="toast">✅ Partner submitted & saved. Ready for next partner.</div>',unsafe_allow_html=True); st.session_state["_p2_submitted"]=False
     st.markdown(f"Total out of **{mx}** ({len(em)} metrics × 5).")
     st.markdown('<div class="partner-hdr">Partner details</div>',unsafe_allow_html=True)
     tiers=_tiers(); t_opts=["Please choose..."]+tiers if tiers else ["Please choose...","(Set tiers in Client Intake)"]
     pc1,pc2,pc3=st.columns(3)
-    with pc1: pn=st.text_input("Partner company name",key="p2_pn",placeholder="e.g. ABC reseller")
-    with pc2: p_yr=st.text_input("Year become partner",key="p2_py",placeholder="e.g. 2020")
-    with pc3: pt=st.selectbox("Tier",t_opts,key="p2_pt")
+    with pc1: pn=st.text_input("Partner company name",key=f"p2_pn_{fv}",placeholder="e.g. ABC reseller",value=view_raw.get("partner_name","") if view_raw else "")
+    with pc2: p_yr=st.text_input("Year become partner",key=f"p2_py_{fv}",placeholder="e.g. 2020",value=view_raw.get("partner_year","") if view_raw else "")
+    with pc3:
+        tier_val = view_raw.get("partner_tier","") if view_raw else ""
+        pt=st.selectbox("Tier",t_opts,index=t_opts.index(tier_val) if tier_val in t_opts else 0,key=f"p2_pt_{fv}")
     pc4,pc5=st.columns(2)
-    with pc4: pcity=st.text_input("City",key="p2_city",placeholder="e.g. Paris")
+    with pc4: pcity=st.text_input("City",key=f"p2_city_{fv}",placeholder="e.g. Paris",value=view_raw.get("partner_city","") if view_raw else "")
     with pc5:
-        saved_pcountry = st.session_state.get("p2_country_val","")
-        pcountry=st.selectbox("Country",COUNTRIES,index=COUNTRIES.index(saved_pcountry) if saved_pcountry in COUNTRIES else 0,key="p2_country")
-    # PAM fields
+        country_val = view_raw.get("partner_country","") if view_raw else ""
+        pcountry=st.selectbox("Country",COUNTRIES,index=COUNTRIES.index(country_val) if country_val in COUNTRIES else 0,key=f"p2_country_{fv}")
     pam1,pam2=st.columns(2)
-    with pam1: pam_name=st.text_input("Partner Account Manager (PAM) name",key="p2_pam_name",placeholder="e.g. Jane Smith")
-    with pam2: pam_email=st.text_input("PAM email",key="p2_pam_email",placeholder="e.g. jane@company.com")
+    with pam1: pam_name=st.text_input("Partner Account Manager (PAM) name",key=f"p2_pam_name_{fv}",placeholder="e.g. Jane Smith",value=view_raw.get("pam_name","") if view_raw else "")
+    with pam2: pam_email=st.text_input("PAM email",key=f"p2_pam_email_{fv}",placeholder="e.g. jane@company.com",value=view_raw.get("pam_email","") if view_raw else "")
     st.markdown("---")
     if chosen_cat=="All Metrics": ve=em
     else:
@@ -729,6 +747,7 @@ elif page=="Step 2 — Score a Partner":
         tt='<span class="tag tag-q">Quantitative</span>' if iq else '<span class="tag tag-ql">Qualitative</span>'
         dt=f'<span class="tag {"tag-hi" if m["direction"]=="higher_is_better" else "tag-lo"}">{"↑ Higher" if m["direction"]=="higher_is_better" else "↓ Lower"} is better</span>'
         st.markdown(f'<div class="mc"><span class="mname">{m["id"]}. {m["name"]}</span>{tt}{dt}<div class="mexpl">{m["explanation"]}</div></div>',unsafe_allow_html=True)
+        view_val = view_raw.get(f"raw_{mk}","") if view_raw else ""
         if iq:
             u=mc.get("unit","") or ""
             hints=[]
@@ -739,12 +758,17 @@ elif page=="Step 2 — Score a Partner":
                 elif not lo and hi: hints.append(f"<b>{s}</b>: ≤{hi}")
             if hints: st.markdown(f'<div class="hint-row">Ranges ({u}): {" &nbsp;·&nbsp; ".join(hints)}</div>',unsafe_allow_html=True)
             ic,sc_c=st.columns([4,1])
-            with ic: pv=st.text_input(f"Value ({u})",key=f"p2_{mk}",placeholder=f"Enter number ({u})",label_visibility="collapsed")
+            with ic: pv=st.text_input(f"Value ({u})",key=f"p2_{mk}_{fv}",placeholder=f"Enter number ({u})",label_visibility="collapsed",value=str(view_val) if view_val else "")
             scr=calc_score(mk,pv)
         else:
             opts=["— Select —"]+[f"({s}) {mc['descriptors'][s]}" for s in("1","2","3","4","5")]
+            # Pre-select for view mode
+            view_idx = 0
+            if view_val:
+                for oi, o in enumerate(opts):
+                    if view_val in o: view_idx = oi; break
             ic,sc_c=st.columns([4,1])
-            with ic: pv=st.selectbox("Level",opts,key=f"p2_{mk}",label_visibility="collapsed")
+            with ic: pv=st.selectbox("Level",opts,index=view_idx,key=f"p2_{mk}_{fv}",label_visibility="collapsed")
             if pv and pv!="— Select —": raw_d=re.sub(r"^\(\d\)\s*","",pv); scr=calc_score(mk,raw_d)
             else: scr=None
         with sc_c:
@@ -754,7 +778,7 @@ elif page=="Step 2 — Score a Partner":
     st.markdown("---")
     full={}; raw_vals={}
     for m in em:
-        mk=m["key"]; pv=st.session_state.get(f"p2_{mk}","")
+        mk=m["key"]; pv=st.session_state.get(f"p2_{mk}_{fv}","")
         if not pv or pv=="— Select —":
             full[mk]=None; raw_vals[mk]=None
         elif m["type"]=="qualitative" and isinstance(pv,str) and pv.startswith("("):
@@ -762,7 +786,7 @@ elif page=="Step 2 — Score a Partner":
         else:
             full[mk]=calc_score(mk,pv); raw_vals[mk]=pv
     si={k:v for k,v in full.items() if v is not None}; total=sum(si.values()); sn=len(si); mp=sn*5
-    pct=(total/mp*100) if mp else 0; gl,gc=_grade(pct); pname=st.session_state.get("p2_pn","Partner") or "Partner"
+    pct=(total/mp*100) if mp else 0; gl,gc=_grade(pct); pname=st.session_state.get(f"p2_pn_{fv}","Partner") or "Partner"
     st.markdown(f"### Live Summary — {pname}")
     c1,c2,c3,c4=st.columns(4)
     with c1: st.markdown(f'<div class="sum-card"><div class="sum-big">{total}</div><div class="sum-lbl">Total</div></div>',unsafe_allow_html=True)
@@ -770,35 +794,34 @@ elif page=="Step 2 — Score a Partner":
     with c3: st.markdown(f'<div class="sum-card"><div class="sum-big">{pct:.1f}%</div><div class="sum-lbl">Percentage</div></div>',unsafe_allow_html=True)
     with c4: st.markdown(f'<div class="sum-card"><div class="sum-big" style="color:{gc}">{gl}</div><div class="sum-lbl">Grade</div></div>',unsafe_allow_html=True)
     st.markdown("---")
-    _,_,submit_col=st.columns([2,2,1])
-    with submit_col:
-        if st.button("✅  Submit & Start New Partner",use_container_width=True,type="primary"):
-            if not pname or pname=="Partner":
-                st.error("Enter a partner name first.")
-            elif _partner_exists(pname):
-                st.error(f"A partner named **{pname}** already exists. Use a unique name.")
-            else:
-                row={"partner_name":pname,"partner_year":st.session_state.get("p2_py",""),
-                     "partner_tier":st.session_state.get("p2_pt",""),
-                     "partner_city":st.session_state.get("p2_city",""),
-                     "partner_country":st.session_state.get("p2_country",""),
-                     "pam_name":st.session_state.get("p2_pam_name",""),
-                     "pam_email":st.session_state.get("p2_pam_email",""),
-                     "total_score":total,"max_possible":mp,"percentage":round(pct,1)}
-                for m in em: row[m["key"]]=full.get(m["key"],"")
-                # Build raw dict for re-scoring
-                raw_dict={"partner_name":pname,"partner_year":st.session_state.get("p2_py",""),
-                          "partner_tier":st.session_state.get("p2_pt",""),
-                          "partner_city":st.session_state.get("p2_city",""),
-                          "partner_country":st.session_state.get("p2_country",""),
-                          "pam_name":st.session_state.get("p2_pam_name",""),
-                          "pam_email":st.session_state.get("p2_pam_email","")}
-                for m in em: raw_dict[f"raw_{m['key']}"]=raw_vals.get(m["key"])
-                _append_partner(row, raw_dict)
-                # Clear all p2_ fields for next partner
-                for k in list(st.session_state.keys()):
-                    if k.startswith("p2_"): del st.session_state[k]
-                st.session_state["_p2_submitted"]=True; st.rerun()
+    if not view_raw:
+        _,_,submit_col=st.columns([2,2,1])
+        with submit_col:
+            if st.button("✅  Submit & Start New Partner",use_container_width=True,type="primary"):
+                if not pname or pname=="Partner":
+                    st.error("Enter a partner name first.")
+                elif _partner_exists(pname):
+                    st.error(f"A partner named **{pname}** already exists. Use a unique name.")
+                else:
+                    row={"partner_name":pname,"partner_year":st.session_state.get(f"p2_py_{fv}",""),
+                         "partner_tier":st.session_state.get(f"p2_pt_{fv}",""),
+                         "partner_city":st.session_state.get(f"p2_city_{fv}",""),
+                         "partner_country":st.session_state.get(f"p2_country_{fv}",""),
+                         "pam_name":st.session_state.get(f"p2_pam_name_{fv}",""),
+                         "pam_email":st.session_state.get(f"p2_pam_email_{fv}",""),
+                         "total_score":total,"max_possible":mp,"percentage":round(pct,1)}
+                    for m in em: row[m["key"]]=full.get(m["key"],"")
+                    raw_dict={"partner_name":pname,"partner_year":st.session_state.get(f"p2_py_{fv}",""),
+                              "partner_tier":st.session_state.get(f"p2_pt_{fv}",""),
+                              "partner_city":st.session_state.get(f"p2_city_{fv}",""),
+                              "partner_country":st.session_state.get(f"p2_country_{fv}",""),
+                              "pam_name":st.session_state.get(f"p2_pam_name_{fv}",""),
+                              "pam_email":st.session_state.get(f"p2_pam_email_{fv}","")}
+                    for m in em: raw_dict[f"raw_{m['key']}"]=raw_vals.get(m["key"])
+                    _append_partner(row, raw_dict)
+                    # Increment form version to clear all fields
+                    st.session_state["p2_ver"]=fv+1
+                    st.session_state["_p2_submitted"]=True; st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -817,11 +840,11 @@ elif page=="Step 3 — Partner Assessment":
     st.markdown(f"**{len(partners)}** partners, **{len(em)}** metrics. Sorted highest first.")
     ps=sorted(partners,key=lambda p:-int(p.get("total_score",0) or 0))
     hdr="<tr><th>Rank</th><th>Partner</th><th>Tier</th><th>PAM</th>"
-    for m in em: hdr+=f'<th title="{m["name"]}">{m["name"][:20]}</th>'
+    for m in em: hdr+=f'<th class="hm-diag" title="{m["name"]}"><div>{m["name"][:25]}</div></th>'
     hdr+="<th>Total</th><th>%</th></tr>"
     rows=""
     for ri,p in enumerate(ps,1):
-        rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px'>{p.get('partner_name','')}</td><td>{p.get('partner_tier','')}</td><td>{p.get('pam_name','')}</td>"
+        rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px;white-space:nowrap'>{p.get('partner_name','')}</td><td>{p.get('partner_tier','')}</td><td style='white-space:nowrap'>{p.get('pam_name','')}</td>"
         for m in em:
             try: v=int(p.get(m["key"],"") or 0)
             except: v=None
@@ -832,7 +855,7 @@ elif page=="Step 3 — Partner Assessment":
         try: pv=float(p.get("percentage",0) or 0)
         except: pv=0
         rows+=f'<td class="hm-total">{tv}</td><td class="hm-total">{pv:.1f}%</td></tr>'
-    st.markdown(f'<div style="overflow-x:auto"><table class="hm-tbl"><thead>{hdr}</thead><tbody>{rows}</tbody></table></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="scroll-tbl"><table class="hm-tbl"><thead>{hdr}</thead><tbody>{rows}</tbody></table></div>',unsafe_allow_html=True)
     st.markdown("---")
     xb=_gen_xlsx(ps,em)
     if xb: st.download_button("⬇️  Download Excel",xb,"Partner_Assessment.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",type="primary")
@@ -907,7 +930,64 @@ elif page=="Step 4 — Partner Classification":
     tbl+="</tbody></table>"
     st.markdown(tbl,unsafe_allow_html=True)
     st.markdown("---")
-    st.download_button("⬇️  Download as JSON",json.dumps(classification,indent=2),"partner_classification.json","application/json")
+    # Downloads: Excel, CSV, JSON
+    dl1, dl2, dl3 = st.columns(3)
+    # Build classification data for export
+    class_rows = []
+    for pn, qn in sorted(classification.items(), key=lambda x: (x[1], x[0])):
+        p = next((p for p in partners if p.get("partner_name") == pn), {})
+        try: tv = int(p.get("total_score", 0) or 0)
+        except: tv = 0
+        try: pv = float(p.get("percentage", 0) or 0)
+        except: pv = 0
+        ql, _ = Q_LABELS.get(qn, (f"Q{qn}", "#666"))
+        class_rows.append({"Partner": pn, "Total Score": tv, "Percentage": round(pv, 1),
+                           "Quadrant": qn, "Classification": ql,
+                           "Tier": p.get("partner_tier", ""), "PAM": p.get("pam_name", "")})
+    with dl1:
+        # Excel
+        try:
+            import openpyxl
+            from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Classification"
+            q_fills = {1: PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid"),
+                       2: PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
+                       3: PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid"),
+                       4: PatternFill(start_color="FA7A7A", end_color="FA7A7A", fill_type="solid")}
+            hf = PatternFill(start_color="1E2A3A", end_color="1E2A3A", fill_type="solid")
+            hfont = Font(color="FFFFFF", bold=True, size=10)
+            bdr = Border(left=Side(style="thin", color="CCCCCC"), right=Side(style="thin", color="CCCCCC"),
+                         top=Side(style="thin", color="CCCCCC"), bottom=Side(style="thin", color="CCCCCC"))
+            headers = ["Partner", "Tier", "PAM", "Total Score", "Percentage", "Quadrant", "Classification"]
+            for ci, h in enumerate(headers, 1):
+                cell = ws.cell(1, ci, h); cell.fill = hf; cell.font = hfont; cell.border = bdr
+                cell.alignment = Alignment(horizontal="center")
+            ws.column_dimensions["A"].width = 28; ws.column_dimensions["B"].width = 14
+            ws.column_dimensions["C"].width = 22; ws.column_dimensions["G"].width = 24
+            for ri, r in enumerate(class_rows, 2):
+                ws.cell(ri, 1, r["Partner"]).border = bdr
+                ws.cell(ri, 2, r["Tier"]).border = bdr
+                ws.cell(ri, 3, r["PAM"]).border = bdr
+                ws.cell(ri, 4, r["Total Score"]).border = bdr; ws.cell(ri, 4).alignment = Alignment(horizontal="center")
+                pc = ws.cell(ri, 5); pc.value = r["Percentage"] / 100; pc.number_format = "0.0%"; pc.border = bdr; pc.alignment = Alignment(horizontal="center")
+                qc = ws.cell(ri, 6, r["Quadrant"]); qc.border = bdr; qc.alignment = Alignment(horizontal="center")
+                qc.fill = q_fills.get(r["Quadrant"], PatternFill())
+                ws.cell(ri, 7, r["Classification"]).border = bdr; ws.cell(ri, 7).font = Font(bold=True)
+            buf = io.BytesIO(); wb.save(buf)
+            st.download_button("⬇️  Download Excel", buf.getvalue(), "Partner_Classification.xlsx",
+                              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+        except ImportError:
+            st.warning("openpyxl required for Excel export")
+    with dl2:
+        # CSV
+        csv_buf = io.StringIO()
+        if class_rows:
+            cw = csv.DictWriter(csv_buf, fieldnames=list(class_rows[0].keys()))
+            cw.writeheader()
+            for r in class_rows: cw.writerow(r)
+        st.download_button("⬇️  Download CSV", csv_buf.getvalue(), "Partner_Classification.csv", "text/csv")
+    with dl3:
+        st.download_button("⬇️  Download JSON", json.dumps(classification, indent=2), "partner_classification.json", "application/json")
 
 
 # ═════════════════════════════════════════════════════════════════════════
