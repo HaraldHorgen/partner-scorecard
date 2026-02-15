@@ -189,6 +189,12 @@ def _logo():
     st.markdown(f'<img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;margin-bottom:8px;">',unsafe_allow_html=True)
 
 def _brand():
+    # Ensure client_info is loaded (may be missing after page switch)
+    if "client_info" not in st.session_state:
+        cp = _client_path()
+        if cp.exists():
+            try: st.session_state["client_info"] = json.loads(cp.read_text())
+            except: st.session_state["client_info"] = {}
     logo_url = st.session_state.get("client_info",{}).get("logo_url","")
     right_logo = f'<img src="{logo_url}" style="max-height:50px;border-radius:6px;" onerror="this.style.display=\'none\'">' if logo_url else ''
     st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div><div style="margin-left:auto;">{right_logo}</div></div>',unsafe_allow_html=True)
@@ -220,14 +226,14 @@ def _rescore_all():
     em = _enabled(cr)
     em_keys = {m["key"] for m in em}
     cp = _csv_path()
-    fnames = ["partner_name","partner_year","partner_tier","partner_city","partner_country","pam_name","pam_email"]
+    fnames = ["partner_name","partner_year","partner_tier","partner_discount","partner_city","partner_country","pam_name","pam_email"]
     fnames += [m["key"] for m in em]
     fnames += ["total_score","max_possible","percentage"]
     with open(cp, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fnames, extrasaction="ignore")
         w.writeheader()
         for rp in raw_partners:
-            row = {k: rp.get(k,"") for k in ["partner_name","partner_year","partner_tier","partner_city","partner_country","pam_name","pam_email"]}
+            row = {k: rp.get(k,"") for k in ["partner_name","partner_year","partner_tier","partner_discount","partner_city","partner_country","pam_name","pam_email"]}
             si = {}
             for m in em:
                 mk = m["key"]
@@ -242,7 +248,7 @@ def _rescore_all():
 
 def _append_partner(row_dict, raw_dict):
     em = _enabled()
-    fnames = ["partner_name","partner_year","partner_tier","partner_city","partner_country","pam_name","pam_email"]
+    fnames = ["partner_name","partner_year","partner_tier","partner_discount","partner_city","partner_country","pam_name","pam_email"]
     fnames += [m["key"] for m in em]
     fnames += ["total_score","max_possible","percentage"]
     cp = _csv_path(); exists = cp.exists()
@@ -482,6 +488,8 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 .hint-row{font-size:.78rem;color:#7a8a9e;font-family:'JetBrains Mono',monospace;margin:6px 0 10px;line-height:1.6}
 [data-testid="stAppViewContainer"] input[type="text"],[data-testid="stAppViewContainer"] textarea{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important}
 [data-testid="stAppViewContainer"] input[type="text"]:focus,[data-testid="stAppViewContainer"] textarea:focus{background:#fff!important;border-color:#2563eb!important}
+[data-testid="stAppViewContainer"] [data-baseweb="select"] > div{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important}
+[data-testid="stAppViewContainer"] [data-baseweb="select"] > div:focus-within{background:#fff!important;border-color:#2563eb!important}
 .hm-tbl{width:100%;border-collapse:collapse;font-size:.82rem;background:#fff;margin:1rem 0}
 .hm-tbl th{background:#1e2a3a;color:#fff;padding:8px 6px;text-align:center;font-weight:700;font-size:.72rem;text-transform:uppercase;white-space:nowrap;border:1px solid #2a3d57}
 .hm-tbl th.hm-diag{white-space:nowrap;vertical-align:bottom;height:140px;padding:0 4px 8px;width:36px;min-width:36px}
@@ -794,28 +802,34 @@ elif page=="Step 2 — Score a Partner":
     # Form version counter — incremented on submit to clear all fields
     if "p2_ver" not in st.session_state: st.session_state["p2_ver"]=0
     fv=st.session_state["p2_ver"]
-    # View mode: if a partner was clicked in sidebar
+    # Edit mode: if a partner was clicked in sidebar or assessment
     view_pn = st.session_state.pop("_view_partner", None)
     view_raw = None
+    is_edit = False
     if view_pn:
         raw_all = _load_raw()
         view_raw = next((r for r in raw_all if r.get("partner_name") == view_pn), None)
         if view_raw:
-            st.info(f"📋 Viewing scorecard for **{view_pn}** (read-only)")
+            is_edit = True
+            st.info(f"✏️ Editing scorecard for **{view_pn}** — make changes and click **Save Changes**")
     if st.session_state.get("_p2_submitted"):
         st.markdown('<div class="toast">✅ Partner submitted & saved. Ready for next partner.</div>',unsafe_allow_html=True); st.session_state["_p2_submitted"]=False
+    if st.session_state.get("_p2_updated"):
+        st.markdown('<div class="toast">✅ Partner scorecard updated successfully.</div>',unsafe_allow_html=True); st.session_state["_p2_updated"]=False
     st.markdown(f"Total out of **{mx}** ({len(em)} metrics × 5).")
     st.markdown('<div class="partner-hdr">Partner details</div>',unsafe_allow_html=True)
     tiers=_tiers(); t_opts=["Please choose..."]+tiers if tiers else ["Please choose...","(Set tiers in Client Intake)"]
-    pc1,pc2,pc3=st.columns(3)
+    pc1,pc2,pc3,pc4=st.columns(4)
     with pc1: pn=st.text_input("Partner company name",key=f"p2_pn_{fv}",placeholder="e.g. ABC reseller",value=view_raw.get("partner_name","") if view_raw else "")
-    with pc2: p_yr=st.text_input("Year become partner",key=f"p2_py_{fv}",placeholder="e.g. 2020",value=view_raw.get("partner_year","") if view_raw else "")
+    with pc2: p_yr=st.text_input("Year became partner",key=f"p2_py_{fv}",placeholder="e.g. 2020",value=view_raw.get("partner_year","") if view_raw else "")
     with pc3:
         tier_val = view_raw.get("partner_tier","") if view_raw else ""
         pt=st.selectbox("Tier",t_opts,index=t_opts.index(tier_val) if tier_val in t_opts else 0,key=f"p2_pt_{fv}")
-    pc4,pc5=st.columns(2)
-    with pc4: pcity=st.text_input("City",key=f"p2_city_{fv}",placeholder="e.g. Paris",value=view_raw.get("partner_city","") if view_raw else "")
-    with pc5:
+    with pc4:
+        p_disc=st.text_input("Partner Discount",key=f"p2_disc_{fv}",placeholder="e.g. 20%",value=view_raw.get("partner_discount","") if view_raw else "")
+    pc5,pc6=st.columns(2)
+    with pc5: pcity=st.text_input("City",key=f"p2_city_{fv}",placeholder="e.g. Paris",value=view_raw.get("partner_city","") if view_raw else "")
+    with pc6:
         country_val = view_raw.get("partner_country","") if view_raw else ""
         pcountry=st.selectbox("Country",COUNTRIES,index=COUNTRIES.index(country_val) if country_val in COUNTRIES else 0,key=f"p2_country_{fv}")
     pam1,pam2=st.columns(2)
@@ -845,7 +859,7 @@ elif page=="Step 2 — Score a Partner":
             scr=calc_score(mk,pv)
         else:
             opts=["— Select —"]+[f"({s}) {mc['descriptors'][s]}" for s in("1","2","3","4","5")]
-            # Pre-select for view mode
+            # Pre-select for edit mode
             view_idx = 0
             if view_val:
                 for oi, o in enumerate(opts):
@@ -877,7 +891,39 @@ elif page=="Step 2 — Score a Partner":
     with c3: st.markdown(f'<div class="sum-card"><div class="sum-big">{pct:.1f}%</div><div class="sum-lbl">Percentage</div></div>',unsafe_allow_html=True)
     with c4: st.markdown(f'<div class="sum-card"><div class="sum-big" style="color:{gc}">{gl}</div><div class="sum-lbl">Grade</div></div>',unsafe_allow_html=True)
     st.markdown("---")
-    if not view_raw:
+    # Build row + raw dicts (shared by both submit and save)
+    def _build_row_raw():
+        row={"partner_name":pname,"partner_year":st.session_state.get(f"p2_py_{fv}",""),
+             "partner_tier":st.session_state.get(f"p2_pt_{fv}",""),
+             "partner_discount":st.session_state.get(f"p2_disc_{fv}",""),
+             "partner_city":st.session_state.get(f"p2_city_{fv}",""),
+             "partner_country":st.session_state.get(f"p2_country_{fv}",""),
+             "pam_name":st.session_state.get(f"p2_pam_name_{fv}",""),
+             "pam_email":st.session_state.get(f"p2_pam_email_{fv}",""),
+             "total_score":total,"max_possible":mp,"percentage":round(pct,1)}
+        for m in em: row[m["key"]]=full.get(m["key"],"")
+        raw_dict={"partner_name":pname,"partner_year":st.session_state.get(f"p2_py_{fv}",""),
+                  "partner_tier":st.session_state.get(f"p2_pt_{fv}",""),
+                  "partner_discount":st.session_state.get(f"p2_disc_{fv}",""),
+                  "partner_city":st.session_state.get(f"p2_city_{fv}",""),
+                  "partner_country":st.session_state.get(f"p2_country_{fv}",""),
+                  "pam_name":st.session_state.get(f"p2_pam_name_{fv}",""),
+                  "pam_email":st.session_state.get(f"p2_pam_email_{fv}","")}
+        for m in em: raw_dict[f"raw_{m['key']}"]=raw_vals.get(m["key"])
+        return row, raw_dict
+    if is_edit:
+        # Edit mode — update existing partner
+        _,_,save_col=st.columns([2,2,1])
+        with save_col:
+            if st.button("💾  Save Changes",use_container_width=True,type="primary"):
+                if not pname or pname=="Partner":
+                    st.error("Partner name is missing.")
+                else:
+                    row, raw_dict = _build_row_raw()
+                    _upsert_partner(row, raw_dict)
+                    st.session_state["_p2_updated"]=True; st.rerun()
+    else:
+        # New partner mode
         _,_,submit_col=st.columns([2,2,1])
         with submit_col:
             if st.button("✅  Submit & Start New Partner",use_container_width=True,type="primary"):
@@ -886,23 +932,8 @@ elif page=="Step 2 — Score a Partner":
                 elif _partner_exists(pname):
                     st.error(f"A partner named **{pname}** already exists. Use a unique name.")
                 else:
-                    row={"partner_name":pname,"partner_year":st.session_state.get(f"p2_py_{fv}",""),
-                         "partner_tier":st.session_state.get(f"p2_pt_{fv}",""),
-                         "partner_city":st.session_state.get(f"p2_city_{fv}",""),
-                         "partner_country":st.session_state.get(f"p2_country_{fv}",""),
-                         "pam_name":st.session_state.get(f"p2_pam_name_{fv}",""),
-                         "pam_email":st.session_state.get(f"p2_pam_email_{fv}",""),
-                         "total_score":total,"max_possible":mp,"percentage":round(pct,1)}
-                    for m in em: row[m["key"]]=full.get(m["key"],"")
-                    raw_dict={"partner_name":pname,"partner_year":st.session_state.get(f"p2_py_{fv}",""),
-                              "partner_tier":st.session_state.get(f"p2_pt_{fv}",""),
-                              "partner_city":st.session_state.get(f"p2_city_{fv}",""),
-                              "partner_country":st.session_state.get(f"p2_country_{fv}",""),
-                              "pam_name":st.session_state.get(f"p2_pam_name_{fv}",""),
-                              "pam_email":st.session_state.get(f"p2_pam_email_{fv}","")}
-                    for m in em: raw_dict[f"raw_{m['key']}"]=raw_vals.get(m["key"])
+                    row, raw_dict = _build_row_raw()
                     _append_partner(row, raw_dict)
-                    # Increment form version to clear all fields
                     st.session_state["p2_ver"]=fv+1
                     st.session_state["_p2_submitted"]=True; st.rerun()
 
@@ -914,20 +945,60 @@ elif page=="Step 3 — Partner Assessment":
     _brand(); st.markdown("## Step 3 — Partner Assessment")
     partners=_load_partners(); em=_enabled()
     if not partners: st.info("No partners scored yet. Complete **Step 2**."); st.stop()
-    # PAM filter
-    pam_names = sorted(set(p.get("pam_name","").strip() for p in partners if p.get("pam_name","").strip()))
-    if pam_names:
-        pam_f = st.selectbox("Filter by Partner Account Manager", ["All PAMs"] + pam_names, key="p3_pam_filter")
-        if pam_f != "All PAMs":
-            partners = [p for p in partners if p.get("pam_name","").strip() == pam_f]
-    st.markdown(f"**{len(partners)}** partners, **{len(em)}** metrics. Sorted highest first.")
-    ps=sorted(partners,key=lambda p:-int(p.get("total_score",0) or 0))
-    hdr="<tr><th>Rank</th><th>Partner</th><th>Tier</th><th>PAM</th>"
+
+    # ── Filters row ──
+    f1, f2, f3, f4 = st.columns([2, 2, 2, 2])
+    with f1:
+        search_q = st.text_input("🔍 Search partner", key="p3_search", placeholder="Type to search...")
+    with f2:
+        pam_names = sorted(set(p.get("pam_name","").strip() for p in partners if p.get("pam_name","").strip()))
+        pam_f = st.selectbox("Filter by PAM", ["All PAMs"] + pam_names, key="p3_pam_filter")
+    with f3:
+        sort_opts = ["Score (highest first)", "Score (lowest first)", "Partner (A–Z)", "Partner (Z–A)", "PAM (A–Z)"]
+        sort_by = st.selectbox("Sort by", sort_opts, key="p3_sort")
+    with f4:
+        metric_filter_opts = ["All metrics"] + [m["name"] for m in em]
+        metric_filter = st.selectbox("Filter by metric score", metric_filter_opts, key="p3_metric_filter")
+
+    # ── Apply filters ──
+    ps = list(partners)
+    if search_q:
+        sq = search_q.strip().lower()
+        ps = [p for p in ps if sq in p.get("partner_name","").lower() or sq in p.get("pam_name","").lower() or sq in p.get("partner_country","").lower()]
+    if pam_f != "All PAMs":
+        ps = [p for p in ps if p.get("pam_name","").strip() == pam_f]
+
+    # Metric value filter: if a specific metric is selected, filter to partners who have a score for it
+    filter_mk = None
+    if metric_filter != "All metrics":
+        filter_mk = next((m["key"] for m in em if m["name"] == metric_filter), None)
+
+    # ── Sort ──
+    if sort_by == "Score (highest first)":
+        ps = sorted(ps, key=lambda p: -int(p.get("total_score",0) or 0))
+    elif sort_by == "Score (lowest first)":
+        ps = sorted(ps, key=lambda p: int(p.get("total_score",0) or 0))
+    elif sort_by == "Partner (A–Z)":
+        ps = sorted(ps, key=lambda p: p.get("partner_name","").lower())
+    elif sort_by == "Partner (Z–A)":
+        ps = sorted(ps, key=lambda p: p.get("partner_name","").lower(), reverse=True)
+    elif sort_by == "PAM (A–Z)":
+        ps = sorted(ps, key=lambda p: p.get("pam_name","").lower())
+
+    # If filtering by specific metric, sort by that metric's value
+    if filter_mk:
+        ps = sorted(ps, key=lambda p: -int(p.get(filter_mk,"") or 0))
+
+    st.markdown(f"**{len(ps)}** partners, **{len(em)}** metrics.")
+
+    # ── Build heatmap table (with Country column and clickable names) ──
+    hdr="<tr><th>Rank</th><th style='text-align:left'>Partner</th><th>Country</th><th>Tier</th><th>PAM</th>"
     for m in em: hdr+=f'<th class="hm-diag" title="{m["name"]}"><div>{m["name"][:25]}</div></th>'
     hdr+="<th>Total</th><th>%</th></tr>"
     rows=""
     for ri,p in enumerate(ps,1):
-        rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px;white-space:nowrap'>{p.get('partner_name','')}</td><td>{p.get('partner_tier','')}</td><td style='white-space:nowrap'>{p.get('pam_name','')}</td>"
+        pn_display = p.get('partner_name','')
+        rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px;white-space:nowrap'>{pn_display}</td><td style='white-space:nowrap'>{p.get('partner_country','')}</td><td>{p.get('partner_tier','')}</td><td style='white-space:nowrap'>{p.get('pam_name','')}</td>"
         for m in em:
             try: v=int(p.get(m["key"],"") or 0)
             except: v=None
@@ -939,6 +1010,22 @@ elif page=="Step 3 — Partner Assessment":
         except: pv=0
         rows+=f'<td class="hm-total">{tv}</td><td class="hm-total">{pv:.1f}%</td></tr>'
     st.markdown(f'<div class="scroll-tbl"><table class="hm-tbl"><thead>{hdr}</thead><tbody>{rows}</tbody></table></div>',unsafe_allow_html=True)
+
+    # ── Clickable partner access ──
+    st.markdown("---")
+    st.markdown("#### 📋 Open Partner Scorecard")
+    partner_names_sorted = [p.get("partner_name","") for p in ps]
+    if partner_names_sorted:
+        oc1, oc2 = st.columns([3, 1])
+        with oc1:
+            open_pn = st.selectbox("Select a partner to view/edit their scorecard", partner_names_sorted, key="p3_open_partner")
+        with oc2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("✏️  Open Scorecard", use_container_width=True, type="primary", key="p3_open_btn"):
+                st.session_state["_view_partner"] = open_pn
+                st.session_state["current_page"] = "Step 2 — Score a Partner"
+                st.rerun()
+
     st.markdown("---")
     xb=_gen_xlsx(ps,em)
     if xb: st.download_button("⬇️  Download Excel",xb,"Partner_Assessment.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",type="primary")
