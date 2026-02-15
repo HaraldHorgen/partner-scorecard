@@ -317,6 +317,209 @@ def _synthetic_raw_for_score(mk, score, cr=None):
         return str(score)
 
 
+# ═════════════════════════════════════════════════════════════════════════
+# AI AGENT HELPERS — Ask ChannelPRO
+# ═════════════════════════════════════════════════════════════════════════
+def _build_ai_system_prompt():
+    """Build a system prompt containing all partner data and criteria definitions."""
+    cr = st.session_state.get("criteria", {})
+    em = _enabled(cr)
+    partners = _load_partners()
+    raw_all = _load_raw()
+    raw_by_name = {r.get("partner_name",""): r for r in raw_all}
+
+    # Build criteria reference
+    criteria_lines = []
+    for m in em:
+        mc = cr.get(m["key"], {})
+        if m["type"] == "quantitative":
+            ranges = []
+            for s in ("1","2","3","4","5"):
+                r = mc.get("ranges",{}).get(s,{})
+                lo, hi = r.get("min",""), r.get("max","")
+                if lo and hi: ranges.append(f"  {s}: {lo}–{hi}")
+                elif lo: ranges.append(f"  {s}: ≥{lo}")
+                elif hi: ranges.append(f"  {s}: ≤{hi}")
+            criteria_lines.append(f"- {m['name']} (key: {m['key']}, unit: {m.get('unit','')}, {m['direction']}, quantitative)\n" + "\n".join(ranges))
+        else:
+            descs = [f"  {s}: {mc.get('descriptors',{}).get(s,'')}" for s in ("1","2","3","4","5")]
+            criteria_lines.append(f"- {m['name']} (key: {m['key']}, {m['direction']}, qualitative)\n" + "\n".join(descs))
+
+    # Build partner data table
+    partner_lines = []
+    for p in partners:
+        raw = raw_by_name.get(p.get("partner_name",""), {})
+        metrics_str = []
+        for m in em:
+            mk = m["key"]
+            try: score = int(p.get(mk,"") or 0)
+            except: score = 0
+            raw_val = raw.get(f"raw_{mk}", "")
+            if score and raw_val:
+                metrics_str.append(f"{m['name']}={score}/5 (raw:{raw_val})")
+            elif score:
+                metrics_str.append(f"{m['name']}={score}/5")
+            else:
+                metrics_str.append(f"{m['name']}=unscored")
+        try: pct = float(p.get("percentage",0) or 0)
+        except: pct = 0
+        try: total = int(p.get("total_score",0) or 0)
+        except: total = 0
+        partner_lines.append(
+            f"Partner: {p.get('partner_name','')}\n"
+            f"  Tier: {p.get('partner_tier','N/A')} | Country: {p.get('partner_country','N/A')} | "
+            f"City: {p.get('partner_city','N/A')} | PAM: {p.get('pam_name','N/A')} | "
+            f"Discount: {p.get('partner_discount','N/A')}\n"
+            f"  Total: {total} | Percentage: {pct:.1f}%\n"
+            f"  Scores: {' | '.join(metrics_str)}"
+        )
+
+    system = f"""You are ChannelPRO AI Assistant, an expert in partner channel management and analysis.
+You analyze partner scorecard data and provide actionable insights.
+
+SCORING SYSTEM: Each metric is scored 1-5 (5=best). Higher percentage = better overall performance.
+Grade scale: A (≥90%), B+ (≥80%), B (≥70%), C+ (≥60%), C (≥50%), D (<50%).
+
+SCORING CRITERIA ({len(em)} active metrics):
+{chr(10).join(criteria_lines)}
+
+PARTNER DATA ({len(partners)} partners):
+{chr(10).join(partner_lines) if partner_lines else "No partners scored yet."}
+
+INSTRUCTIONS:
+- Answer questions about partner performance, comparisons, filtering, and trends.
+- When listing partners, include their key metrics and scores.
+- You can suggest or make score updates when asked.
+- Be specific with numbers and partner names.
+
+Always respond with valid JSON (no markdown fences, no extra text) in this exact format:
+{{
+  "answer": "Your detailed analysis in plain text. Use \\n for line breaks.",
+  "table": [
+    {{"Partner": "Name", "Tier": "Gold", "Country": "US", "PAM": "Jane", "Total": 85, "Pct": "72.3%", "Key Metric": "value"}}
+  ],
+  "chart": {{
+    "type": "bar or pie or hbar",
+    "title": "Chart title",
+    "x_label": "X axis label",
+    "y_label": "Y axis label",
+    "data": [{{"label": "Name", "value": 42.5}}, {{"label": "Name2", "value": 38.1}}]
+  }},
+  "updates": [
+    {{"partner": "Partner Name", "metric_key": "metric_key_here", "new_score": 3, "reason": "Explanation"}}
+  ]
+}}
+
+RULES for the JSON response:
+- "answer" is ALWAYS required.
+- "table" should be included when listing/filtering partners. Use null if not relevant. Include only the most relevant columns.
+- "chart" should be included when a visualization would help (comparisons, distributions, rankings). Use null if not needed. Keep data to ≤15 items for readability.
+- "updates" should ONLY be included when the user explicitly asks to change/update scores. Use null otherwise. Only update scores to values 1-5.
+- For "table", dynamically choose columns that are relevant to the query.
+- For "chart", choose the best chart type: "bar" for comparisons, "pie" for distributions, "hbar" for ranked lists.
+"""
+    return system
+
+def _call_ai(messages, api_key):
+    """Call Anthropic API with conversation history."""
+    import requests as req
+    system = _build_ai_system_prompt()
+    try:
+        resp = req.post("https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            json={"model": "claude-sonnet-4-20250514", "max_tokens": 4096, "system": system, "messages": messages},
+            timeout=60)
+        if resp.status_code != 200:
+            return {"answer": f"API error ({resp.status_code}): {resp.text}", "table": None, "chart": None, "updates": None}
+        data = resp.json()
+        text = "".join(b.get("text","") for b in data.get("content",[]) if b.get("type")=="text")
+        # Parse JSON from response
+        text = text.strip()
+        # Strip markdown fences if present
+        if text.startswith("```"): text = re.sub(r"^```(?:json)?\s*","",text); text = re.sub(r"\s*```$","",text)
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"answer": text if 'text' in dir() else "Could not parse AI response.", "table": None, "chart": None, "updates": None}
+    except Exception as e:
+        return {"answer": f"Error: {str(e)}", "table": None, "chart": None, "updates": None}
+
+def _render_ai_chart(chart_spec):
+    """Render a chart from AI-generated spec using Altair."""
+    import altair as alt
+    if not chart_spec or not chart_spec.get("data"): return
+    ctype = chart_spec.get("type", "bar")
+    title = chart_spec.get("title", "")
+    data = chart_spec["data"]
+    df = pd.DataFrame(data)
+    if "label" not in df.columns or "value" not in df.columns: return
+
+    if ctype == "pie":
+        chart = alt.Chart(df).mark_arc(innerRadius=50).encode(
+            theta=alt.Theta("value:Q"),
+            color=alt.Color("label:N", legend=alt.Legend(title="")),
+            tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
+        ).properties(title=title, height=350)
+    elif ctype == "hbar":
+        chart = alt.Chart(df).mark_bar().encode(
+            y=alt.Y("label:N", sort="-x", title=chart_spec.get("y_label","")),
+            x=alt.X("value:Q", title=chart_spec.get("x_label","")),
+            color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
+            tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
+        ).properties(title=title, height=max(len(data)*28, 200))
+    else:  # bar
+        chart = alt.Chart(df).mark_bar().encode(
+            x=alt.X("label:N", sort="-y", axis=alt.Axis(labelAngle=-45, labelLimit=120), title=chart_spec.get("x_label","")),
+            y=alt.Y("value:Q", title=chart_spec.get("y_label","")),
+            color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
+            tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
+        ).properties(title=title, height=350)
+    st.altair_chart(chart, use_container_width=True)
+
+def _apply_ai_updates(updates, cr):
+    """Apply score updates from AI response."""
+    em = _enabled(cr)
+    em_keys = {m["key"] for m in em}
+    partners = _load_partners()
+    raw_all = _load_raw()
+    applied = 0
+    for upd in updates:
+        pn = upd.get("partner","")
+        mk = upd.get("metric_key","")
+        new_score = upd.get("new_score")
+        if not pn or not mk or mk not in em_keys: continue
+        if not isinstance(new_score, int) or new_score < 1 or new_score > 5: continue
+        # Find partner
+        csv_p = next((p for p in partners if p.get("partner_name","").strip().lower() == pn.strip().lower()), None)
+        raw_p = next((r for r in raw_all if r.get("partner_name","").strip().lower() == pn.strip().lower()), None)
+        if not csv_p: continue
+        # Update score
+        csv_p[mk] = new_score
+        if raw_p:
+            raw_p[f"raw_{mk}"] = _synthetic_raw_for_score(mk, new_score, cr)
+        # Recalculate totals
+        si = {}
+        for m in em:
+            try: v = int(csv_p.get(m["key"],"") or 0)
+            except: v = 0
+            if v and 1 <= v <= 5: si[m["key"]] = v
+        total = sum(si.values()); sn = len(si); mp = sn * 5
+        csv_p["total_score"] = total; csv_p["max_possible"] = mp
+        csv_p["percentage"] = round(total / mp * 100, 1) if mp else 0
+        applied += 1
+    # Rewrite files
+    if applied > 0:
+        cp = _csv_path()
+        if partners:
+            fnames = list(partners[0].keys())
+            with open(cp, "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=fnames, extrasaction="ignore")
+                w.writeheader()
+                for p in partners: w.writerow(p)
+        rp = _raw_path()
+        rp.write_text(json.dumps(raw_all, indent=2))
+    return applied
+
+
 def _gen_xlsx(partners, enabled_metrics):
     try:
         import openpyxl
@@ -568,7 +771,7 @@ if "current_page" not in st.session_state:
 # ═════════════════════════════════════════════════════════════════════════
 # SIDEBAR (with clickable partner list + PAM filter)
 # ═════════════════════════════════════════════════════════════════════════
-CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Break-even — Program Costs","Break-even — Detailed Analysis"]
+CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO","Break-even — Program Costs","Break-even — Detailed Analysis"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
 with st.sidebar:
@@ -607,7 +810,7 @@ with st.sidebar:
     st.markdown("---")
 
     chosen_cat = "All Metrics"
-    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Break-even — Program Costs","Break-even — Detailed Analysis","Admin — Manage Users","Admin — All Clients"):
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO","Break-even — Program Costs","Break-even — Detailed Analysis","Admin — Manage Users","Admin — All Clients"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
     st.markdown("---")
@@ -1533,6 +1736,126 @@ elif page=="Partner List":
                        "pam_name": new_pam, "pam_email": ""}
                 _append_partner(row, raw)
                 st.session_state["_pl_added"] = True; st.rerun()
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# ASK CHANNELPRO — AI-powered natural language data agent
+# ═════════════════════════════════════════════════════════════════════════
+elif page=="Ask ChannelPRO":
+    _brand(); st.markdown("## 🤖 Ask ChannelPRO")
+    if not _save_path().exists():
+        st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first."); st.stop()
+    st.session_state["criteria"] = json.loads(_save_path().read_text())
+    cr = st.session_state["criteria"]
+    partners = _load_partners()
+    if not partners:
+        st.warning("⚠️ Score at least one partner in **Step 2** before using the AI assistant."); st.stop()
+
+    st.markdown("""<div class="info-box">
+    Ask questions about your partner scorecards in plain English. Examples:<br>
+    • <i>"Which partners have MDF utilization below 40%?"</i><br>
+    • <i>"Show me partners with both a low close rate and long sales cycle"</i><br>
+    • <i>"Compare the top 5 partners by revenue vs their customer satisfaction"</i><br>
+    • <i>"Set Partner X's renewal rate score to 4"</i><br>
+    Conversations are multi-turn — ask follow-up questions to refine results.</div>""", unsafe_allow_html=True)
+
+    # API key management
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        api_key = st.text_input("🔑 Enter your Anthropic API key", type="password", key="ai_api_key",
+            help="Set ANTHROPIC_API_KEY environment variable on Render, or enter it here for this session.")
+    if not api_key:
+        st.info("An Anthropic API key is required. Set `ANTHROPIC_API_KEY` in your Render environment variables, or paste one above.")
+        st.stop()
+
+    # Init chat history
+    if "ai_messages" not in st.session_state:
+        st.session_state["ai_messages"] = []
+    if "ai_pending_updates" not in st.session_state:
+        st.session_state["ai_pending_updates"] = None
+
+    # ── Pending updates confirmation ──
+    if st.session_state["ai_pending_updates"]:
+        updates = st.session_state["ai_pending_updates"]
+        st.markdown("### ⚠️ Confirm Score Updates")
+        st.markdown("The AI has suggested the following changes:")
+        upd_rows = ""
+        for u in updates:
+            upd_rows += f'<tr><td style="text-align:left;padding-left:10px">{u["partner"]}</td>'
+            mk = u["metric_key"]
+            mname = next((m["name"] for m in SCORECARD_METRICS if m["key"] == mk), mk)
+            upd_rows += f'<td>{mname}</td><td style="font-weight:800">{u["new_score"]}/5</td>'
+            upd_rows += f'<td style="text-align:left">{u.get("reason","")}</td></tr>'
+        st.markdown(f'<table class="hm-tbl"><thead><tr><th style="text-align:left">Partner</th><th>Metric</th><th>New Score</th><th style="text-align:left">Reason</th></tr></thead><tbody>{upd_rows}</tbody></table>', unsafe_allow_html=True)
+        uc1, uc2, uc3 = st.columns([1, 1, 3])
+        with uc1:
+            if st.button("✅ Apply Updates", type="primary", key="ai_confirm_upd"):
+                applied = _apply_ai_updates(updates, cr)
+                st.session_state["ai_pending_updates"] = None
+                st.session_state["ai_messages"].append({"role": "assistant", "content":
+                    json.dumps({"answer": f"✅ Applied {applied} score update(s) successfully.", "table": None, "chart": None, "updates": None})})
+                st.rerun()
+        with uc2:
+            if st.button("❌ Cancel", key="ai_cancel_upd"):
+                st.session_state["ai_pending_updates"] = None
+                st.session_state["ai_messages"].append({"role": "assistant", "content":
+                    json.dumps({"answer": "Updates cancelled. No changes were made.", "table": None, "chart": None, "updates": None})})
+                st.rerun()
+        st.markdown("---")
+
+    # ── Chat history display ──
+    for msg in st.session_state["ai_messages"]:
+        if msg["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(msg["content"])
+        else:
+            with st.chat_message("assistant", avatar="🤖"):
+                try:
+                    resp = json.loads(msg["content"])
+                    st.markdown(resp.get("answer","").replace("\\n", "\n"))
+                    if resp.get("table"):
+                        st.dataframe(pd.DataFrame(resp["table"]), use_container_width=True, hide_index=True)
+                    if resp.get("chart"):
+                        _render_ai_chart(resp["chart"])
+                except:
+                    st.markdown(msg["content"])
+
+    # ── Controls row ──
+    ctrl1, ctrl2 = st.columns([1, 6])
+    with ctrl1:
+        if st.button("🗑️ Clear chat", key="ai_clear", use_container_width=True):
+            st.session_state["ai_messages"] = []
+            st.session_state["ai_pending_updates"] = None
+            st.rerun()
+
+    # ── Chat input ──
+    user_input = st.chat_input("Ask about your partners...", key="ai_chat_input")
+    if user_input:
+        # Add user message
+        st.session_state["ai_messages"].append({"role": "user", "content": user_input})
+
+        # Build messages for API (only role + content for API call)
+        api_messages = []
+        for msg in st.session_state["ai_messages"]:
+            if msg["role"] == "user":
+                api_messages.append({"role": "user", "content": msg["content"]})
+            else:
+                # Send back the raw JSON as assistant response for context
+                api_messages.append({"role": "assistant", "content": msg["content"]})
+
+        # Call API
+        with st.spinner("🤖 Analyzing your partner data..."):
+            resp = _call_ai(api_messages, api_key)
+
+        # Store response
+        resp_json = json.dumps(resp)
+        st.session_state["ai_messages"].append({"role": "assistant", "content": resp_json})
+
+        # Handle updates — stage for confirmation
+        if resp.get("updates") and isinstance(resp["updates"], list) and len(resp["updates"]) > 0:
+            st.session_state["ai_pending_updates"] = resp["updates"]
+
+        st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
