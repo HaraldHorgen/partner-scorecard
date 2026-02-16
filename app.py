@@ -7,6 +7,12 @@ Single instance, per-client data isolation, admin overview.
 import csv, hashlib, io, json, os, pathlib, re, secrets
 import streamlit as st
 import pandas as pd
+# pip install streamlit-aggrid   (add to requirements.txt for Render)
+try:
+    from st_aggrid import AgGrid, GridOptionsBuilder, JsCode, GridUpdateMode, ColumnsAutoSizeMode
+    HAS_AGGRID = True
+except ImportError:
+    HAS_AGGRID = False
 
 # ═════════════════════════════════════════════════════════════════════════
 # DATA & AUTH PATHS
@@ -1263,90 +1269,327 @@ elif page=="Step 3 — Partner Assessment":
     partners=_load_partners(); em=_enabled()
     if not partners: st.info("No partners scored yet. Complete **Step 2**."); st.stop()
 
-    # ── Filters row ──
-    f1, f2, f3, f4 = st.columns([2, 2, 2, 2])
-    with f1:
-        search_q = st.text_input("🔍 Search partner", key="p3_search", placeholder="Type to search...")
-    with f2:
-        pam_names = sorted(set(p.get("pam_name","").strip() for p in partners if p.get("pam_name","").strip()))
-        pam_f = st.selectbox("Filter by PAM", ["All PAMs"] + pam_names, key="p3_pam_filter")
-    with f3:
-        sort_opts = ["Score (highest first)", "Score (lowest first)", "Partner (A–Z)", "Partner (Z–A)", "PAM (A–Z)"]
-        sort_by = st.selectbox("Sort by", sort_opts, key="p3_sort")
-    with f4:
-        metric_filter_opts = ["All metrics"] + [m["name"] for m in em]
-        metric_filter = st.selectbox("Filter by metric score", metric_filter_opts, key="p3_metric_filter")
-
-    # ── Apply filters ──
-    ps = list(partners)
-    if search_q:
-        sq = search_q.strip().lower()
-        ps = [p for p in ps if sq in p.get("partner_name","").lower() or sq in p.get("pam_name","").lower() or sq in p.get("partner_country","").lower()]
-    if pam_f != "All PAMs":
-        ps = [p for p in ps if p.get("pam_name","").strip() == pam_f]
-
-    # Metric value filter: if a specific metric is selected, filter to partners who have a score for it
-    filter_mk = None
-    if metric_filter != "All metrics":
-        filter_mk = next((m["key"] for m in em if m["name"] == metric_filter), None)
-
-    # ── Sort ──
-    if sort_by == "Score (highest first)":
-        ps = sorted(ps, key=lambda p: -int(p.get("total_score",0) or 0))
-    elif sort_by == "Score (lowest first)":
-        ps = sorted(ps, key=lambda p: int(p.get("total_score",0) or 0))
-    elif sort_by == "Partner (A–Z)":
-        ps = sorted(ps, key=lambda p: p.get("partner_name","").lower())
-    elif sort_by == "Partner (Z–A)":
-        ps = sorted(ps, key=lambda p: p.get("partner_name","").lower(), reverse=True)
-    elif sort_by == "PAM (A–Z)":
-        ps = sorted(ps, key=lambda p: p.get("pam_name","").lower())
-
-    # If filtering by specific metric, sort by that metric's value
-    if filter_mk:
-        ps = sorted(ps, key=lambda p: -int(p.get(filter_mk,"") or 0))
-
-    st.markdown(f"**{len(ps)}** partners, **{len(em)}** metrics.")
-
-    # ── Build heatmap table (with Country column and clickable names) ──
-    hdr="<tr><th>Rank</th><th style='text-align:left'>Partner</th><th>Country</th><th>Tier</th><th>PAM</th>"
-    for m in em: hdr+=f'<th class="hm-diag" title="{m["name"]}"><div>{m["name"][:25]}</div></th>'
-    hdr+="<th>Total</th><th>%</th></tr>"
-    rows=""
-    for ri,p in enumerate(ps,1):
-        pn_display = p.get('partner_name','')
-        rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px;white-space:nowrap'>{pn_display}</td><td style='white-space:nowrap'>{p.get('partner_country','')}</td><td>{p.get('partner_tier','')}</td><td style='white-space:nowrap'>{p.get('pam_name','')}</td>"
+    # ── Build DataFrame for display ──
+    rows_data = []
+    for p in partners:
+        row = {
+            "Partner": p.get("partner_name",""),
+            "Country": p.get("partner_country",""),
+            "Tier": p.get("partner_tier",""),
+            "Discount": p.get("partner_discount",""),
+            "PAM": p.get("pam_name",""),
+        }
         for m in em:
-            try: v=int(p.get(m["key"],"") or 0)
-            except: v=None
-            if v and 1<=v<=5: rows+=f'<td class="hm{v}">{v}</td>'
-            else: rows+='<td style="color:#ccc">—</td>'
-        try: tv=int(p.get("total_score",0) or 0)
-        except: tv=0
-        try: pv=float(p.get("percentage",0) or 0)
-        except: pv=0
-        rows+=f'<td class="hm-total">{tv}</td><td class="hm-total">{pv:.1f}%</td></tr>'
-    st.markdown(f'<div class="scroll-tbl"><table class="hm-tbl"><thead>{hdr}</thead><tbody>{rows}</tbody></table></div>',unsafe_allow_html=True)
+            try: v = int(p.get(m["key"],"") or 0)
+            except: v = 0
+            row[m["name"]] = v if v else 0
+        try: row["Total"] = int(p.get("total_score",0) or 0)
+        except: row["Total"] = 0
+        try: row["Pct"] = round(float(p.get("percentage",0) or 0), 1)
+        except: row["Pct"] = 0.0
+        gl, gc = _grade(row["Pct"])
+        row["Grade"] = gl
+        rows_data.append(row)
 
-    # ── Clickable partner access ──
-    st.markdown("---")
-    st.markdown("#### 📋 Open Partner Scorecard")
-    partner_names_sorted = [p.get("partner_name","") for p in ps]
-    if partner_names_sorted:
-        oc1, oc2 = st.columns([3, 1])
-        with oc1:
-            open_pn = st.selectbox("Select a partner to view/edit their scorecard", partner_names_sorted, key="p3_open_partner")
-        with oc2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("✏️  Open Scorecard", use_container_width=True, type="primary", key="p3_open_btn"):
-                st.session_state["_view_partner"] = open_pn
-                st.session_state["current_page"] = "Step 2 — Score a Partner"
-                st.rerun()
+    df_grid = pd.DataFrame(rows_data)
+    # Ensure metric columns are numeric
+    for m in em:
+        df_grid[m["name"]] = pd.to_numeric(df_grid[m["name"]], errors="coerce").fillna(0).astype(int)
+    df_grid["Total"] = pd.to_numeric(df_grid["Total"], errors="coerce").fillna(0).astype(int)
+    df_grid["Pct"] = pd.to_numeric(df_grid["Pct"], errors="coerce").fillna(0.0)
 
-    st.markdown("---")
-    xb=_gen_xlsx(ps,em)
-    if xb: st.download_button("⬇️  Download Excel",xb,"Partner_Assessment.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",type="primary")
-    if _csv_path().exists(): st.download_button("⬇️  Download CSV",_csv_path().read_text(),"all_partners.csv","text/csv")
+    st.markdown(f"**{len(df_grid)}** partners · **{len(em)}** metrics")
+
+    if HAS_AGGRID:
+        # ══════════════════════════════════════════════════════════════
+        # AG-GRID FILTERABLE TABLE
+        # ══════════════════════════════════════════════════════════════
+        st.caption("💡 Use the filter icons (≡) in each column header to filter. Click any column header to sort. The floating filter row below headers allows quick type-to-filter.")
+
+        # --- JsCode cell style for metric score heatmap (1-5) ---
+        metric_cell_style = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined || params.value === 0) {
+                return {'color': '#ccc', 'textAlign': 'center', 'fontWeight': '700',
+                        'fontFamily': "'JetBrains Mono', monospace", 'fontSize': '0.82rem'};
+            }
+            var v = parseInt(params.value);
+            var bg = '#f0f0f0'; var fg = '#333';
+            if (v === 1)      { bg = '#FA7A7A'; fg = '#fff'; }
+            else if (v === 2) { bg = '#FFFFCC'; fg = '#333'; }
+            else if (v === 3) { bg = '#FFFFCC'; fg = '#333'; }
+            else if (v === 4) { bg = '#C6EFCE'; fg = '#1b6e23'; }
+            else if (v === 5) { bg = '#C6EFCE'; fg = '#1b6e23'; }
+            return {'backgroundColor': bg, 'color': fg, 'textAlign': 'center',
+                    'fontWeight': '700', 'fontFamily': "'JetBrains Mono', monospace",
+                    'fontSize': '0.82rem'};
+        }
+        """)
+
+        # --- JsCode cell style for Grade column ---
+        grade_cell_style = JsCode("""
+        function(params) {
+            var g = params.value;
+            var bg = '#dc4040'; var fg = '#fff';
+            if (g === 'A')       { bg = '#1b6e23'; }
+            else if (g === 'B+') { bg = '#49a34f'; }
+            else if (g === 'B')  { bg = '#6aab2e'; }
+            else if (g === 'C+') { bg = '#d4a917'; fg = '#333'; }
+            else if (g === 'C')  { bg = '#e8820c'; }
+            else                 { bg = '#dc4040'; }
+            return {'backgroundColor': bg, 'color': fg, 'textAlign': 'center',
+                    'fontWeight': '800', 'fontFamily': "'JetBrains Mono', monospace",
+                    'fontSize': '0.88rem', 'borderRadius': '4px'};
+        }
+        """)
+
+        # --- JsCode cell style for Total and Pct columns ---
+        total_cell_style = JsCode("""
+        function(params) {
+            return {'backgroundColor': '#1e2a3a', 'color': '#fff', 'textAlign': 'center',
+                    'fontWeight': '800', 'fontFamily': "'JetBrains Mono', monospace",
+                    'fontSize': '0.85rem'};
+        }
+        """)
+
+        # --- JsCode formatter: show "—" for 0 scores ---
+        metric_formatter = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined || params.value === 0) return '—';
+            return params.value;
+        }
+        """)
+
+        # --- JsCode formatter: show % suffix ---
+        pct_formatter = JsCode("""
+        function(params) {
+            if (params.value === null || params.value === undefined) return '0.0%';
+            return params.value.toFixed(1) + '%';
+        }
+        """)
+
+        # --- Build grid options ---
+        gb = GridOptionsBuilder.from_dataframe(df_grid)
+
+        # Global defaults
+        gb.configure_default_column(
+            filterable=True, sortable=True, resizable=True,
+            floatingFilter=True, minWidth=70,
+            suppressMenu=False
+        )
+
+        # --- Configure individual columns ---
+        # Text columns — text filter
+        gb.configure_column("Partner", pinned="left", minWidth=180, maxWidth=280,
+            filter="agTextColumnFilter",
+            cellStyle={"textAlign": "left", "fontWeight": "600", "paddingLeft": "10px"})
+        gb.configure_column("Country", minWidth=100, maxWidth=140,
+            filter="agTextColumnFilter")
+        gb.configure_column("Tier", minWidth=80, maxWidth=120,
+            filter="agSetColumnFilter")
+        gb.configure_column("Discount", minWidth=90, maxWidth=120,
+            filter="agTextColumnFilter")
+        gb.configure_column("PAM", minWidth=140, maxWidth=200,
+            filter="agTextColumnFilter",
+            cellStyle={"textAlign": "left"})
+
+        # Metric score columns — number filter + heatmap styling
+        for m in em:
+            gb.configure_column(
+                m["name"],
+                type=["numericColumn"],
+                filter="agNumberColumnFilter",
+                cellStyle=metric_cell_style,
+                valueFormatter=metric_formatter,
+                minWidth=55, maxWidth=120,
+                headerTooltip=f'{m["name"]} — {m["explanation"]}',
+            )
+
+        # Total and Percentage — number filter + dark styling
+        gb.configure_column("Total", type=["numericColumn"],
+            filter="agNumberColumnFilter", cellStyle=total_cell_style,
+            minWidth=70, maxWidth=90, sort="desc")
+        gb.configure_column("Pct", type=["numericColumn"], header_name="Score %",
+            filter="agNumberColumnFilter", cellStyle=total_cell_style,
+            valueFormatter=pct_formatter,
+            minWidth=80, maxWidth=100)
+
+        # Grade — set filter (dropdown) + color styling
+        gb.configure_column("Grade", filter="agSetColumnFilter",
+            cellStyle=grade_cell_style,
+            minWidth=75, maxWidth=90)
+
+        # Pagination for large datasets
+        if len(df_grid) > 50:
+            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=50)
+
+        # Selection (optional — for future "open scorecard" integration)
+        gb.configure_selection(selection_mode="single", use_checkbox=False)
+
+        grid_options = gb.build()
+
+        # Custom CSS to match ChannelPRO theme
+        custom_css = {
+            ".ag-header-cell-label": {"font-size": "0.72rem", "font-weight": "700",
+                "text-transform": "uppercase", "letter-spacing": "0.03em"},
+            ".ag-header-row": {"background-color": "#1e2a3a !important"},
+            ".ag-header-cell": {"background-color": "#1e2a3a !important", "color": "#fff !important",
+                "border-right": "1px solid #2a3d57 !important"},
+            ".ag-floating-filter-input": {"font-size": "0.78rem"},
+            ".ag-row-even": {"background-color": "#fafbfd"},
+            ".ag-row-odd": {"background-color": "#ffffff"},
+            ".ag-row:hover": {"background-color": "#edf2fa !important"},
+            ".ag-root-wrapper": {"border-radius": "10px", "border": "1px solid #e2e6ed",
+                "font-family": "'DM Sans', sans-serif"},
+        }
+
+        # Determine height
+        grid_height = min(max(len(df_grid) * 36 + 110, 350), 700)
+
+        # Render the grid
+        grid_response = AgGrid(
+            df_grid,
+            gridOptions=grid_options,
+            custom_css=custom_css,
+            height=grid_height,
+            theme="streamlit",
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
+            allow_unsafe_jscode=True,
+            key="p3_aggrid",
+        )
+
+        # --- Handle row selection → open scorecard ---
+        selected_rows = grid_response.get("selected_rows", None)
+        if selected_rows is not None and len(selected_rows) > 0:
+            if isinstance(selected_rows, pd.DataFrame):
+                sel_pn = selected_rows.iloc[0].get("Partner", "")
+            else:
+                sel_pn = selected_rows[0].get("Partner", "")
+            if sel_pn:
+                st.markdown("---")
+                oc1, oc2 = st.columns([3, 1])
+                with oc1:
+                    st.markdown(f"**Selected:** {sel_pn}")
+                with oc2:
+                    if st.button("✏️  Open Scorecard", use_container_width=True, type="primary", key="p3_open_btn"):
+                        st.session_state["_view_partner"] = sel_pn
+                        st.session_state["current_page"] = "Step 2 — Score a Partner"
+                        st.rerun()
+
+        # --- Clickable partner access (always available as fallback) ---
+        st.markdown("---")
+        st.markdown("#### 📋 Open Partner Scorecard")
+        partner_names_sorted = sorted(df_grid["Partner"].tolist())
+        if partner_names_sorted:
+            oc1, oc2 = st.columns([3, 1])
+            with oc1:
+                open_pn = st.selectbox("Select a partner to view/edit their scorecard", partner_names_sorted, key="p3_open_partner_sel")
+            with oc2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("✏️  Open Scorecard", use_container_width=True, type="primary", key="p3_open_btn2"):
+                    st.session_state["_view_partner"] = open_pn
+                    st.session_state["current_page"] = "Step 2 — Score a Partner"
+                    st.rerun()
+
+        # --- Downloads (use the full DataFrame — filtered by AgGrid state is the displayed data) ---
+        st.markdown("---")
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            xb = _gen_xlsx(partners, em)
+            if xb:
+                st.download_button("⬇️  Download Excel", xb, "Partner_Assessment.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+        with dl2:
+            csv_buf = df_grid.to_csv(index=False)
+            st.download_button("⬇️  Download CSV", csv_buf, "Partner_Assessment.csv", "text/csv")
+
+    else:
+        # ══════════════════════════════════════════════════════════════
+        # FALLBACK: original HTML heatmap table (when st_aggrid not installed)
+        # ══════════════════════════════════════════════════════════════
+        st.warning("📦 Install `streamlit-aggrid` for interactive column filtering: `pip install streamlit-aggrid`")
+
+        # ── Quick filters row ──
+        f1, f2, f3, f4 = st.columns([2, 2, 2, 2])
+        with f1:
+            search_q = st.text_input("🔍 Search partner", key="p3_search", placeholder="Type to search...")
+        with f2:
+            pam_names = sorted(set(p.get("pam_name","").strip() for p in partners if p.get("pam_name","").strip()))
+            pam_f = st.selectbox("Filter by PAM", ["All PAMs"] + pam_names, key="p3_pam_filter")
+        with f3:
+            sort_opts = ["Score (highest first)", "Score (lowest first)", "Partner (A–Z)", "Partner (Z–A)", "PAM (A–Z)"]
+            sort_by = st.selectbox("Sort by", sort_opts, key="p3_sort")
+        with f4:
+            metric_filter_opts = ["All metrics"] + [m["name"] for m in em]
+            metric_filter = st.selectbox("Filter by metric score", metric_filter_opts, key="p3_metric_filter")
+
+        # ── Apply filters ──
+        ps = list(partners)
+        if search_q:
+            sq = search_q.strip().lower()
+            ps = [p for p in ps if sq in p.get("partner_name","").lower() or sq in p.get("pam_name","").lower() or sq in p.get("partner_country","").lower()]
+        if pam_f != "All PAMs":
+            ps = [p for p in ps if p.get("pam_name","").strip() == pam_f]
+        filter_mk = None
+        if metric_filter != "All metrics":
+            filter_mk = next((m["key"] for m in em if m["name"] == metric_filter), None)
+
+        # ── Sort ──
+        if sort_by == "Score (highest first)":
+            ps = sorted(ps, key=lambda p: -int(p.get("total_score",0) or 0))
+        elif sort_by == "Score (lowest first)":
+            ps = sorted(ps, key=lambda p: int(p.get("total_score",0) or 0))
+        elif sort_by == "Partner (A–Z)":
+            ps = sorted(ps, key=lambda p: p.get("partner_name","").lower())
+        elif sort_by == "Partner (Z–A)":
+            ps = sorted(ps, key=lambda p: p.get("partner_name","").lower(), reverse=True)
+        elif sort_by == "PAM (A–Z)":
+            ps = sorted(ps, key=lambda p: p.get("pam_name","").lower())
+        if filter_mk:
+            ps = sorted(ps, key=lambda p: -int(p.get(filter_mk,"") or 0))
+
+        st.markdown(f"**{len(ps)}** partners, **{len(em)}** metrics.")
+
+        # ── Build heatmap table ──
+        hdr="<tr><th>Rank</th><th style='text-align:left'>Partner</th><th>Country</th><th>Tier</th><th>PAM</th>"
+        for m in em: hdr+=f'<th class="hm-diag" title="{m["name"]}"><div>{m["name"][:25]}</div></th>'
+        hdr+="<th>Total</th><th>%</th></tr>"
+        rows=""
+        for ri,p in enumerate(ps,1):
+            pn_display = p.get('partner_name','')
+            rows+=f"<tr><td><b>{ri}</b></td><td style='text-align:left;padding-left:10px;white-space:nowrap'>{pn_display}</td><td style='white-space:nowrap'>{p.get('partner_country','')}</td><td>{p.get('partner_tier','')}</td><td style='white-space:nowrap'>{p.get('pam_name','')}</td>"
+            for m in em:
+                try: v=int(p.get(m["key"],"") or 0)
+                except: v=None
+                if v and 1<=v<=5: rows+=f'<td class="hm{v}">{v}</td>'
+                else: rows+='<td style="color:#ccc">—</td>'
+            try: tv=int(p.get("total_score",0) or 0)
+            except: tv=0
+            try: pv=float(p.get("percentage",0) or 0)
+            except: pv=0
+            rows+=f'<td class="hm-total">{tv}</td><td class="hm-total">{pv:.1f}%</td></tr>'
+        st.markdown(f'<div class="scroll-tbl"><table class="hm-tbl"><thead>{hdr}</thead><tbody>{rows}</tbody></table></div>',unsafe_allow_html=True)
+
+        # ── Clickable partner access ──
+        st.markdown("---")
+        st.markdown("#### 📋 Open Partner Scorecard")
+        partner_names_sorted = [p.get("partner_name","") for p in ps]
+        if partner_names_sorted:
+            oc1, oc2 = st.columns([3, 1])
+            with oc1:
+                open_pn = st.selectbox("Select a partner to view/edit their scorecard", partner_names_sorted, key="p3_open_partner")
+            with oc2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("✏️  Open Scorecard", use_container_width=True, type="primary", key="p3_open_btn"):
+                    st.session_state["_view_partner"] = open_pn
+                    st.session_state["current_page"] = "Step 2 — Score a Partner"
+                    st.rerun()
+
+        st.markdown("---")
+        xb=_gen_xlsx(ps,em)
+        if xb: st.download_button("⬇️  Download Excel",xb,"Partner_Assessment.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",type="primary")
+        if _csv_path().exists(): st.download_button("⬇️  Download CSV",_csv_path().read_text(),"all_partners.csv","text/csv")
 
 
 # ═════════════════════════════════════════════════════════════════════════
