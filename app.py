@@ -538,8 +538,7 @@ def _call_ai(messages, api_key):
         return {"answer": f"Error: {str(e)}", "table": None, "chart": None, "updates": None}
 
 def _render_ai_chart(chart_spec):
-    """Render a chart from AI-generated spec using Altair."""
-    import altair as alt
+    """Render a chart from AI-generated spec. Falls back to st.bar_chart if Altair is unavailable."""
     if not chart_spec or not chart_spec.get("data"): return
     ctype = chart_spec.get("type", "bar")
     title = chart_spec.get("title", "")
@@ -547,27 +546,38 @@ def _render_ai_chart(chart_spec):
     df = pd.DataFrame(data)
     if "label" not in df.columns or "value" not in df.columns: return
 
-    if ctype == "pie":
-        chart = alt.Chart(df).mark_arc(innerRadius=50).encode(
-            theta=alt.Theta("value:Q"),
-            color=alt.Color("label:N", legend=alt.Legend(title="")),
-            tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
-        ).properties(title=title, height=350)
-    elif ctype == "hbar":
-        chart = alt.Chart(df).mark_bar().encode(
-            y=alt.Y("label:N", sort="-x", title=chart_spec.get("y_label","")),
-            x=alt.X("value:Q", title=chart_spec.get("x_label","")),
-            color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
-            tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
-        ).properties(title=title, height=max(len(data)*28, 200))
-    else:  # bar
-        chart = alt.Chart(df).mark_bar().encode(
-            x=alt.X("label:N", sort="-y", axis=alt.Axis(labelAngle=-45, labelLimit=120), title=chart_spec.get("x_label","")),
-            y=alt.Y("value:Q", title=chart_spec.get("y_label","")),
-            color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
-            tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
-        ).properties(title=title, height=350)
-    st.altair_chart(chart, use_container_width=True)
+    try:
+        import altair as alt
+        if ctype == "pie":
+            chart = alt.Chart(df).mark_arc(innerRadius=50).encode(
+                theta=alt.Theta("value:Q"),
+                color=alt.Color("label:N", legend=alt.Legend(title="")),
+                tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
+            ).properties(title=title, height=350)
+        elif ctype == "hbar":
+            chart = alt.Chart(df).mark_bar().encode(
+                y=alt.Y("label:N", sort="-x", title=chart_spec.get("y_label","")),
+                x=alt.X("value:Q", title=chart_spec.get("x_label","")),
+                color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
+                tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
+            ).properties(title=title, height=max(len(data)*28, 200))
+        else:  # bar
+            chart = alt.Chart(df).mark_bar().encode(
+                x=alt.X("label:N", sort="-y", axis=alt.Axis(labelAngle=-45, labelLimit=120), title=chart_spec.get("x_label","")),
+                y=alt.Y("value:Q", title=chart_spec.get("y_label","")),
+                color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
+                tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
+            ).properties(title=title, height=350)
+        st.altair_chart(chart, use_container_width=True)
+    except Exception:
+        # Altair unavailable or incompatible — fall back to native Streamlit chart
+        if title:
+            st.markdown(f"**{title}**")
+        chart_df = df.set_index("label")
+        if ctype == "hbar":
+            st.bar_chart(chart_df, horizontal=True)
+        else:
+            st.bar_chart(chart_df)
 
 def _apply_ai_updates(updates, cr):
     """Apply score updates from AI response."""
@@ -798,8 +808,8 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 [data-testid="stAppViewContainer"] [data-baseweb="select"] > div:focus-within{background:#fff!important;border-color:#2563eb!important}
 .hm-tbl{width:100%;border-collapse:collapse;font-size:.82rem;background:#fff;margin:1rem 0}
 .hm-tbl th{background:#1e2a3a;color:#fff;padding:8px 6px;text-align:center;font-weight:700;font-size:.72rem;text-transform:uppercase;white-space:nowrap;border:1px solid #2a3d57}
-.hm-tbl th.hm-diag{white-space:nowrap;vertical-align:bottom;height:140px;padding:0 4px 8px;width:36px;min-width:36px}
-.hm-tbl th.hm-diag > div{transform:rotate(-55deg);transform-origin:bottom left;width:1.8em;margin-left:12px}
+.hm-tbl th.hm-diag{white-space:nowrap;vertical-align:bottom;height:160px;padding:0;width:40px;min-width:40px;text-align:left}
+.hm-tbl th.hm-diag > div{display:inline-block;white-space:nowrap;transform:rotate(-55deg);transform-origin:0 100%;width:max-content;padding-bottom:6px;margin-left:22px;font-size:.7rem;line-height:1}
 .hm-tbl td{padding:6px;text-align:center;border:1px solid #e2e6ed;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:.82rem}
 .scroll-tbl{overflow-x:auto;overflow-y:auto;max-height:80vh;border:1px solid #e2e6ed;border-radius:10px}
 .hm1{background:#FA7A7A;color:#fff}.hm2{background:#FFFFCC;color:#333}.hm3{background:#FFFFCC;color:#333}
@@ -2036,23 +2046,76 @@ elif page=="Partner List":
                 ed_pam = st.text_input("PAM name", value=csv_p.get("pam_name",""), key="ple_pam")
             ed_pam_email = st.text_input("PAM email", value=csv_p.get("pam_email",""), key="ple_pam_email")
 
-            # Metric scores
-            st.markdown('<div class="sec-head">📊 Metric Scores (0 = not scored, 1–5 = score)</div>', unsafe_allow_html=True)
-            edit_scores = {}
+            # Metric scores — show actual values (raw) with computed scores
+            st.markdown('<div class="sec-head">📊 Metric Scores — enter the actual value; the score (1–5) is computed automatically</div>', unsafe_allow_html=True)
+            edit_raw_vals = {}
             for cat in CATEGORIES:
                 cat_metrics = [m for m in em if m["key"] in cat["keys"]]
                 if not cat_metrics: continue
                 st.markdown(f"**{cat['icon']} {cat['label']}**")
-                cols = st.columns(min(len(cat_metrics), 3))
-                for mi, m in enumerate(cat_metrics):
-                    mk = m["key"]
-                    try: cur_score = int(csv_p.get(mk, 0) or 0)
-                    except: cur_score = 0
-                    with cols[mi % len(cols)]:
-                        sc = st.number_input(m["name"], min_value=0, max_value=5, value=cur_score,
-                            step=1, key=f"ple_s_{mk}",
-                            help=f"{m['explanation']}  •  {'Quantitative' if m['type']=='quantitative' else 'Qualitative'}")
-                    edit_scores[mk] = sc
+                for m in cat_metrics:
+                    mk = m["key"]; mc = cr.get(mk, {})
+                    if not mc: continue
+                    iq = m["type"] == "quantitative"
+                    # Get the raw value from raw JSON (the actual imported value)
+                    raw_val = raw_p.get(f"raw_{mk}", "") if raw_p else ""
+                    # Fallback: if no raw value stored, try to reverse from score
+                    if not raw_val and csv_p:
+                        try:
+                            cur_score = int(csv_p.get(mk, 0) or 0)
+                            if cur_score and 1 <= cur_score <= 5:
+                                raw_val = str(_synthetic_raw_for_score(mk, cur_score, cr) or "")
+                        except: pass
+
+                    if iq:
+                        u = mc.get("unit", "") or ""
+                        hints = []
+                        for s in ("1","2","3","4","5"):
+                            r = mc["ranges"][s]; lo, hi = r["min"], r["max"]
+                            if lo and hi: hints.append(f"**{s}**: {lo}–{hi}")
+                            elif lo and not hi: hints.append(f"**{s}**: ≥{lo}")
+                            elif not lo and hi: hints.append(f"**{s}**: ≤{hi}")
+                        ic, sc_c = st.columns([4, 1])
+                        with ic:
+                            pv = st.text_input(f"{m['name']} ({u})" if u else m["name"],
+                                value=str(raw_val) if raw_val else "",
+                                key=f"ple_v_{mk}",
+                                help=f"{m['explanation']}  •  Ranges: {', '.join(hints)}" if hints else m["explanation"])
+                        scr = calc_score(mk, pv, cr) if pv else None
+                        with sc_c:
+                            if scr:
+                                st.markdown(f'<div style="margin-top:28px;text-align:center;padding:6px 0;border-radius:6px;font-weight:800;color:#fff;background:{SC.get(scr,"#ccc")}">{scr}/5</div>', unsafe_allow_html=True)
+                            else:
+                                st.markdown('<div style="margin-top:28px;text-align:center;padding:6px 0;border-radius:6px;font-weight:800;color:#888;background:#eee">—</div>', unsafe_allow_html=True)
+                        edit_raw_vals[mk] = pv
+                    else:
+                        opts = ["— Select —"] + [f"({s}) {mc['descriptors'][s]}" for s in ("1","2","3","4","5")]
+                        # Pre-select matching descriptor
+                        sel_idx = 0
+                        if raw_val:
+                            for oi, o in enumerate(opts):
+                                if oi == 0: continue
+                                desc = re.sub(r"^\(\d\)\s*", "", o)
+                                if desc == raw_val:
+                                    sel_idx = oi; break
+                            else:
+                                for oi, o in enumerate(opts):
+                                    if oi > 0 and raw_val in o: sel_idx = oi; break
+                        ic, sc_c = st.columns([4, 1])
+                        with ic:
+                            pv = st.selectbox(m["name"], opts, index=sel_idx,
+                                key=f"ple_v_{mk}", help=m["explanation"])
+                        if pv and pv != "— Select —":
+                            raw_d = re.sub(r"^\(\d\)\s*", "", pv)
+                            scr = calc_score(mk, raw_d, cr)
+                        else:
+                            raw_d = None; scr = None
+                        with sc_c:
+                            if scr:
+                                st.markdown(f'<div style="margin-top:28px;text-align:center;padding:6px 0;border-radius:6px;font-weight:800;color:#fff;background:{SC.get(scr,"#ccc")}">{scr}/5</div>', unsafe_allow_html=True)
+                            else:
+                                st.markdown('<div style="margin-top:28px;text-align:center;padding:6px 0;border-radius:6px;font-weight:800;color:#888;background:#eee">—</div>', unsafe_allow_html=True)
+                        edit_raw_vals[mk] = raw_d
 
             st.markdown("---")
             _, save_col = st.columns([3, 1])
@@ -2060,7 +2123,7 @@ elif page=="Partner List":
                 edit_sub = st.form_submit_button("💾  Save Changes", use_container_width=True, type="primary")
 
         if edit_sub:
-            # Build updated raw dict and row dict
+            # Build updated raw dict and row dict from actual values
             new_raw = {"partner_name": edit_pn, "partner_year": ed_year, "partner_tier": ed_tier,
                        "partner_discount": ed_disc,
                        "partner_city": ed_city, "partner_country": ed_country,
@@ -2068,11 +2131,18 @@ elif page=="Partner List":
             new_row = dict(new_raw)  # start with same detail fields
             si = {}
             for m in em:
-                mk = m["key"]; sc = edit_scores.get(mk, 0)
-                if sc and 1 <= sc <= 5:
-                    # Generate a synthetic raw value so _rescore_all works
-                    new_raw[f"raw_{mk}"] = _synthetic_raw_for_score(mk, sc, cr)
-                    new_row[mk] = sc; si[mk] = sc
+                mk = m["key"]
+                raw_val = st.session_state.get(f"ple_v_{mk}", "")
+                # Handle qualitative selectbox values
+                if isinstance(raw_val, str) and raw_val.startswith("(") and m["type"] == "qualitative":
+                    raw_val = re.sub(r"^\(\d\)\s*", "", raw_val)
+                if raw_val and raw_val != "— Select —":
+                    new_raw[f"raw_{mk}"] = raw_val
+                    scr = calc_score(mk, raw_val, cr)
+                    if scr and 1 <= scr <= 5:
+                        new_row[mk] = scr; si[mk] = scr
+                    else:
+                        new_row[mk] = ""
                 else:
                     new_raw[f"raw_{mk}"] = None
                     new_row[mk] = ""
@@ -2198,13 +2268,30 @@ elif page=="Ask ChannelPRO™":
     • <i>"Set Partner X's renewal rate score to 4"</i><br>
     Conversations are multi-turn — ask follow-up questions to refine results.</div>""", unsafe_allow_html=True)
 
-    # API key management
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    # API key management — check multiple sources
+    api_key = ""
+    # 1. Check environment variable (set on Render dashboard → Environment → Environment Variables)
+    env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if env_key:
+        api_key = env_key
+    # 2. Check Streamlit secrets (alternative: .streamlit/secrets.toml or Render secret files)
+    if not api_key:
+        try:
+            api_key = st.secrets.get("ANTHROPIC_API_KEY", "").strip()
+        except Exception:
+            pass
+    # 3. Check session state (persists if user entered it earlier this session)
+    if not api_key:
+        api_key = st.session_state.get("_anthropic_api_key", "")
+    # 4. If still empty, ask user to enter it
     if not api_key:
         api_key = st.text_input("🔑 Enter your Anthropic API key", type="password", key="ai_api_key",
-            help="Set ANTHROPIC_API_KEY environment variable on Render, or enter it here for this session.")
-    if not api_key:
-        st.info("An Anthropic API key is required. Set `ANTHROPIC_API_KEY` in your Render environment variables, or paste one above.")
+            help="Set ANTHROPIC_API_KEY in Render → Environment → Environment Variables, then **redeploy** the service. Or enter it here for this session.")
+    # Save to session state so it survives page navigations within the same session
+    if api_key:
+        st.session_state["_anthropic_api_key"] = api_key
+    else:
+        st.info("An Anthropic API key is required. Set `ANTHROPIC_API_KEY` in your Render environment variables (then redeploy), or paste one above.")
         st.stop()
 
     # Init chat history
@@ -2251,12 +2338,24 @@ elif page=="Ask ChannelPRO™":
             with st.chat_message("assistant", avatar="🤖"):
                 try:
                     resp = json.loads(msg["content"])
-                    st.markdown(resp.get("answer","").replace("\\n", "\n"))
+                except (json.JSONDecodeError, TypeError):
+                    resp = None
+                if resp and isinstance(resp, dict):
+                    answer_text = resp.get("answer", "")
+                    if answer_text:
+                        st.markdown(answer_text.replace("\\n", "\n"))
                     if resp.get("table"):
-                        st.dataframe(pd.DataFrame(resp["table"]), use_container_width=True, hide_index=True)
+                        try:
+                            st.dataframe(pd.DataFrame(resp["table"]), use_container_width=True, hide_index=True)
+                        except Exception:
+                            pass
                     if resp.get("chart"):
-                        _render_ai_chart(resp["chart"])
-                except:
+                        try:
+                            _render_ai_chart(resp["chart"])
+                        except Exception:
+                            pass
+                else:
+                    # Plain text message (non-JSON)
                     st.markdown(msg["content"])
 
     # ── Controls row ──
@@ -2291,9 +2390,15 @@ elif page=="Ask ChannelPRO™":
                 resp = _call_ai(api_messages, api_key)
             st.markdown(resp.get("answer","").replace("\\n", "\n"))
             if resp.get("table"):
-                st.dataframe(pd.DataFrame(resp["table"]), use_container_width=True, hide_index=True)
+                try:
+                    st.dataframe(pd.DataFrame(resp["table"]), use_container_width=True, hide_index=True)
+                except Exception:
+                    pass
             if resp.get("chart"):
-                _render_ai_chart(resp["chart"])
+                try:
+                    _render_ai_chart(resp["chart"])
+                except Exception:
+                    pass
 
         # Store response
         resp_json = json.dumps(resp)
@@ -2824,69 +2929,89 @@ elif page=="Break-even — Detailed Analysis":
 
     chart_df = df.head(15).copy()
     if len(chart_df) > 0 and total_support_cost > 0:
-        import altair as alt
+        try:
+            import altair as alt
 
-        tab1, tab2, tab3 = st.tabs(["Support Cost vs Revenue", "Cost Distribution", "Cost/Revenue Ratio"])
+            tab1, tab2, tab3 = st.tabs(["Support Cost vs Revenue", "Cost Distribution", "Cost/Revenue Ratio"])
 
-        with tab1:
+            with tab1:
+                st.markdown("#### Top Partners: Support Cost vs Revenue")
+                # Melt for grouped bar chart
+                bar_src = chart_df[["Partner", "Revenues", "Support cost"]].copy()
+                bar_src = bar_src.melt(id_vars="Partner", var_name="Metric", value_name="Amount")
+                bar_chart = alt.Chart(bar_src).mark_bar().encode(
+                    x=alt.X("Partner:N", sort=list(chart_df["Partner"]), axis=alt.Axis(labelAngle=-45, labelLimit=120)),
+                    y=alt.Y("Amount:Q", title="$"),
+                    color=alt.Color("Metric:N", scale=alt.Scale(domain=["Revenues","Support cost"], range=["#2563eb","#dc4040"])),
+                    xOffset="Metric:N",
+                    tooltip=["Partner", "Metric", alt.Tooltip("Amount:Q", format="$,.0f")]
+                ).properties(height=400)
+                st.altair_chart(bar_chart, use_container_width=True)
+
+            with tab2:
+                st.markdown("#### Cost Distribution by Partner")
+                top10 = df.head(10).copy()
+                rest_cost = df.iloc[10:]["Support cost"].sum() if len(df) > 10 else 0
+                pie_src = top10[["Partner", "Support cost"]].copy()
+                if rest_cost > 0:
+                    pie_src = pd.concat([pie_src, pd.DataFrame([{"Partner": "Others", "Support cost": rest_cost}])], ignore_index=True)
+                pie_chart = alt.Chart(pie_src).mark_arc(innerRadius=50).encode(
+                    theta=alt.Theta("Support cost:Q"),
+                    color=alt.Color("Partner:N", legend=alt.Legend(title="Partner")),
+                    tooltip=["Partner", alt.Tooltip("Support cost:Q", format="$,.2f")]
+                ).properties(height=400)
+                st.altair_chart(pie_chart, use_container_width=True)
+
+                # Revenue distribution pie
+                st.markdown("#### Revenue Distribution by Partner")
+                rev_src = top10[["Partner", "Revenues"]].copy()
+                rest_rev = df.iloc[10:]["Revenues"].sum() if len(df) > 10 else 0
+                if rest_rev > 0:
+                    rev_src = pd.concat([rev_src, pd.DataFrame([{"Partner": "Others", "Revenues": rest_rev}])], ignore_index=True)
+                rev_pie = alt.Chart(rev_src).mark_arc(innerRadius=50).encode(
+                    theta=alt.Theta("Revenues:Q"),
+                    color=alt.Color("Partner:N", legend=alt.Legend(title="Partner")),
+                    tooltip=["Partner", alt.Tooltip("Revenues:Q", format="$,.0f")]
+                ).properties(height=400)
+                st.altair_chart(rev_pie, use_container_width=True)
+
+            with tab3:
+                st.markdown("#### Cost / Revenue Ratio by Partner")
+                ratio_df = chart_df[["Partner", "Revenues", "# of calls", "Support cost"]].copy()
+                ratio_df["Cost/Rev %"] = ratio_df.apply(lambda r: (r["Support cost"] / r["Revenues"] * 100) if r["Revenues"] > 0 else 0, axis=1)
+                ratio_chart = alt.Chart(ratio_df).mark_bar().encode(
+                    x=alt.X("Partner:N", sort=list(chart_df["Partner"]), axis=alt.Axis(labelAngle=-45, labelLimit=120)),
+                    y=alt.Y("Cost/Rev %:Q", title="Support Cost as % of Revenue"),
+                    color=alt.condition(
+                        alt.datum["Cost/Rev %"] > 10, alt.value("#dc4040"),
+                        alt.condition(alt.datum["Cost/Rev %"] > 5, alt.value("#d4a917"), alt.value("#1b6e23"))
+                    ),
+                    tooltip=["Partner", alt.Tooltip("Revenues:Q", format="$,.0f"),
+                             alt.Tooltip("Support cost:Q", format="$,.2f"),
+                             alt.Tooltip("Cost/Rev %:Q", format=".1f")]
+                ).properties(height=400)
+                st.altair_chart(ratio_chart, use_container_width=True)
+
+                # Table view
+                st.markdown("##### Detail")
+                tbl_html = '<table class="hm-tbl"><thead><tr><th style="text-align:left">Partner</th><th>Revenue</th><th>Calls</th><th>Support Cost</th><th>Cost/Rev %</th></tr></thead><tbody>'
+                for _, r in ratio_df.iterrows():
+                    rc = "#dc4040" if r["Cost/Rev %"] > 10 else "#d4a917" if r["Cost/Rev %"] > 5 else "#1b6e23"
+                    tbl_html += f'<tr><td style="text-align:left;padding-left:10px">{r["Partner"]}</td><td>${r["Revenues"]:,.0f}</td><td>{int(r["# of calls"]):,}</td><td>${r["Support cost"]:,.2f}</td><td style="color:{rc};font-weight:700">{r["Cost/Rev %"]:.1f}%</td></tr>'
+                tbl_html += '</tbody></table>'
+                st.markdown(tbl_html, unsafe_allow_html=True)
+
+        except Exception:
+            # Altair unavailable — fall back to native Streamlit charts
             st.markdown("#### Top Partners: Support Cost vs Revenue")
-            # Melt for grouped bar chart
-            bar_src = chart_df[["Partner", "Revenues", "Support cost"]].copy()
-            bar_src = bar_src.melt(id_vars="Partner", var_name="Metric", value_name="Amount")
-            bar_chart = alt.Chart(bar_src).mark_bar().encode(
-                x=alt.X("Partner:N", sort=list(chart_df["Partner"]), axis=alt.Axis(labelAngle=-45, labelLimit=120)),
-                y=alt.Y("Amount:Q", title="$"),
-                color=alt.Color("Metric:N", scale=alt.Scale(domain=["Revenues","Support cost"], range=["#2563eb","#dc4040"])),
-                xOffset="Metric:N",
-                tooltip=["Partner", "Metric", alt.Tooltip("Amount:Q", format="$,.0f")]
-            ).properties(height=400)
-            st.altair_chart(bar_chart, use_container_width=True)
+            fb_df = chart_df[["Partner", "Revenues", "Support cost"]].set_index("Partner")
+            st.bar_chart(fb_df)
 
-        with tab2:
-            st.markdown("#### Cost Distribution by Partner")
-            top10 = df.head(10).copy()
-            rest_cost = df.iloc[10:]["Support cost"].sum() if len(df) > 10 else 0
-            pie_src = top10[["Partner", "Support cost"]].copy()
-            if rest_cost > 0:
-                pie_src = pd.concat([pie_src, pd.DataFrame([{"Partner": "Others", "Support cost": rest_cost}])], ignore_index=True)
-            pie_chart = alt.Chart(pie_src).mark_arc(innerRadius=50).encode(
-                theta=alt.Theta("Support cost:Q"),
-                color=alt.Color("Partner:N", legend=alt.Legend(title="Partner")),
-                tooltip=["Partner", alt.Tooltip("Support cost:Q", format="$,.2f")]
-            ).properties(height=400)
-            st.altair_chart(pie_chart, use_container_width=True)
-
-            # Revenue distribution pie
-            st.markdown("#### Revenue Distribution by Partner")
-            rev_src = top10[["Partner", "Revenues"]].copy()
-            rest_rev = df.iloc[10:]["Revenues"].sum() if len(df) > 10 else 0
-            if rest_rev > 0:
-                rev_src = pd.concat([rev_src, pd.DataFrame([{"Partner": "Others", "Revenues": rest_rev}])], ignore_index=True)
-            rev_pie = alt.Chart(rev_src).mark_arc(innerRadius=50).encode(
-                theta=alt.Theta("Revenues:Q"),
-                color=alt.Color("Partner:N", legend=alt.Legend(title="Partner")),
-                tooltip=["Partner", alt.Tooltip("Revenues:Q", format="$,.0f")]
-            ).properties(height=400)
-            st.altair_chart(rev_pie, use_container_width=True)
-
-        with tab3:
-            st.markdown("#### Cost / Revenue Ratio by Partner")
+            st.markdown("#### Cost / Revenue Ratio")
             ratio_df = chart_df[["Partner", "Revenues", "# of calls", "Support cost"]].copy()
             ratio_df["Cost/Rev %"] = ratio_df.apply(lambda r: (r["Support cost"] / r["Revenues"] * 100) if r["Revenues"] > 0 else 0, axis=1)
-            ratio_chart = alt.Chart(ratio_df).mark_bar().encode(
-                x=alt.X("Partner:N", sort=list(chart_df["Partner"]), axis=alt.Axis(labelAngle=-45, labelLimit=120)),
-                y=alt.Y("Cost/Rev %:Q", title="Support Cost as % of Revenue"),
-                color=alt.condition(
-                    alt.datum["Cost/Rev %"] > 10, alt.value("#dc4040"),
-                    alt.condition(alt.datum["Cost/Rev %"] > 5, alt.value("#d4a917"), alt.value("#1b6e23"))
-                ),
-                tooltip=["Partner", alt.Tooltip("Revenues:Q", format="$,.0f"),
-                         alt.Tooltip("Support cost:Q", format="$,.2f"),
-                         alt.Tooltip("Cost/Rev %:Q", format=".1f")]
-            ).properties(height=400)
-            st.altair_chart(ratio_chart, use_container_width=True)
+            st.bar_chart(ratio_df[["Partner","Cost/Rev %"]].set_index("Partner"))
 
-            # Table view
             st.markdown("##### Detail")
             tbl_html = '<table class="hm-tbl"><thead><tr><th style="text-align:left">Partner</th><th>Revenue</th><th>Calls</th><th>Support Cost</th><th>Cost/Rev %</th></tr></thead><tbody>'
             for _, r in ratio_df.iterrows():
