@@ -66,32 +66,33 @@ SCORECARD_METRICS = [
     {"id":4,"key":"pct_revenues_saas","name":"% of vendor revenues from SaaS","explanation":"Transformation to SaaS/recurring revenues.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Revenue & Growth","defaults":{"1":{"min":"0","max":"20"},"2":{"min":"20","max":"40"},"3":{"min":"40","max":"60"},"4":{"min":"60","max":"80"},"5":{"min":"80","max":"100"}}},
     {"id":5,"key":"net_revenue_expansion","name":"Net revenue expansion","explanation":"Growth in revenues for existing customers.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Revenue & Growth","defaults":{"1":{"min":"","max":"0"},"2":{"min":"0","max":"5"},"3":{"min":"5","max":"15"},"4":{"min":"15","max":"25"},"5":{"min":"25","max":""}}},
     {"id":6,"key":"total_revenues","name":"Total revenues (if available)","explanation":"Overall revenues including all products and services.","type":"quantitative","unit":"$","direction":"higher_is_better","cat":"Revenue & Growth","defaults":{"1":{"min":"0","max":"1000000"},"2":{"min":"1000001","max":"5000000"},"3":{"min":"5000001","max":"20000000"},"4":{"min":"20000001","max":"100000000"},"5":{"min":"100000001","max":""}}},
-    {"id":7,"key":"average_deal_size","name":"Average deal size","explanation":"Average annualized subscription/license value.","type":"quantitative","unit":"$","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"5000"},"2":{"min":"5001","max":"15000"},"3":{"min":"15001","max":"40000"},"4":{"min":"40001","max":"100000"},"5":{"min":"100001","max":""}}},
-    {"id":8,"key":"avg_time_to_close","name":"Average time to close","explanation":"Deal registration to signed subscription/EULA.","type":"quantitative","unit":"days","direction":"lower_is_better","cat":"Sales Performance","defaults":{"1":{"min":"181","max":""},"2":{"min":"121","max":"180"},"3":{"min":"61","max":"120"},"4":{"min":"31","max":"60"},"5":{"min":"0","max":"30"}}},
-    {"id":9,"key":"registered_deals","name":"Registered deals","explanation":"Number of deals registered with vendor.","type":"quantitative","unit":"count","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"5"},"2":{"min":"6","max":"15"},"3":{"min":"16","max":"30"},"4":{"min":"31","max":"60"},"5":{"min":"61","max":""}}},
-    {"id":10,"key":"win_loss_ratio","name":"Win/loss ratio","explanation":"% of registered deals that closed.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"10"},"2":{"min":"10","max":"25"},"3":{"min":"25","max":"40"},"4":{"min":"40","max":"60"},"5":{"min":"60","max":"100"}}},
-    {"id":11,"key":"partner_generated_opps_pct","name":"Partner Generated Opps as % of Pipeline","explanation":"Partner-generated vs. vendor leads.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"10"},"2":{"min":"10","max":"25"},"3":{"min":"25","max":"50"},"4":{"min":"50","max":"75"},"5":{"min":"75","max":"100"}}},
-    {"id":12,"key":"frequency_of_business","name":"Frequency of business","explanation":"Steady flow or seasonal?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":"Sporadic — 1-2 transactions/year","2":"Seasonal — clustered in 1-2 quarters","3":"Moderate — activity most quarters","4":"Consistent — monthly or near-monthly","5":"Highly active — continuous deal flow"}},
-    {"id":13,"key":"renewal_rate","name":"Renewal rate","explanation":"% of subscriptions renewed.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Retention & Satisfaction","defaults":{"1":{"min":"0","max":"60"},"2":{"min":"60","max":"75"},"3":{"min":"75","max":"85"},"4":{"min":"85","max":"93"},"5":{"min":"93","max":"100"}}},
-    {"id":14,"key":"customer_satisfaction","name":"Customer satisfaction","explanation":"NPS or satisfaction measurement.","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Retention & Satisfaction","defaults":{"1":"No measurement; frequent complaints","2":"Anecdotal only; some dissatisfaction","3":"Measured informally; average","4":"Formal NPS/CSAT; consistently positive","5":"Industry-leading; referenceable customers"}},
-    {"id":15,"key":"communication_with_vendor","name":"Communication with vendor","explanation":"Quality of communications — calls, QBRs, visits.","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Retention & Satisfaction","defaults":{"1":"Unresponsive — hard to reach","2":"Reactive only","3":"Periodic — monthly calls, no QBR","4":"Strong — regular cadence, QBRs","5":"Exemplary — weekly touchpoints, exec visits"}},
-    {"id":16,"key":"mdf_utilization_rate","name":"MDF utilization rate","explanation":"Using vendor-sponsored marketing funds?","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":{"min":"0","max":"20"},"2":{"min":"20","max":"40"},"3":{"min":"40","max":"60"},"4":{"min":"60","max":"80"},"5":{"min":"80","max":"100"}}},
-    {"id":17,"key":"quality_of_sales_org","name":"Quality of sales organization","explanation":"Do they need more guidance?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":"Weak — no dedicated reps","2":"Below average — lack product knowledge","3":"Adequate — average metrics","4":"Strong — good pipeline management","5":"Excellent — top-tier, consistently high"}},
-    {"id":18,"key":"vendor_certifications","name":"Vendor certification(s)","explanation":"Investing in your technology?","type":"quantitative","unit":"certs","direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":{"min":"0","max":"0"},"2":{"min":"1","max":"2"},"3":{"min":"3","max":"5"},"4":{"min":"6","max":"10"},"5":{"min":"11","max":""}}},
-    {"id":19,"key":"sales_support_calls","name":"Sales support calls received","explanation":"Big pipeline or can't sell?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":"Excessive — lack of knowledge","2":"Frequent routine questions","3":"Moderate — mixed","4":"Mostly deal-strategy-driven","5":"Rare — complex high-value only"}},
-    {"id":20,"key":"tech_support_calls","name":"Tech support calls received","explanation":"Lack of training?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":"Excessive — training gaps","2":"Frequent — certs should cover","3":"Average — occasional escalations","4":"Low — complex edge cases","5":"Minimal — self-sufficient"}},
-    {"id":21,"key":"dedication_vs_competitive","name":"Dedication vs. competitive products","explanation":"Strategic vendor or afterthought?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":"Sells competitor as primary","2":"Competitor default; you by request","3":"Sells both equally","4":"You preferred; competitor secondary","5":"Exclusively sells your solution"}},
-    {"id":22,"key":"dedication_vs_other_vendors","name":"Dedication vs. other vendors","explanation":"% of business your solution represents.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":{"min":"0","max":"5"},"2":{"min":"5","max":"15"},"3":{"min":"15","max":"30"},"4":{"min":"30","max":"50"},"5":{"min":"50","max":"100"}}},
-    {"id":23,"key":"geographical_coverage","name":"Geographical market coverage","explanation":"Right-sized territory?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":"Very limited local presence","2":"Small territory; gaps","3":"Adequate regional coverage","4":"Strong multi-region, aligned","5":"National/intl or dominant"}},
-    {"id":24,"key":"vertical_coverage","name":"Vertical market coverage","explanation":"Specialize in verticals?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":"No vertical focus","2":"Emerging in 1 vertical","3":"Established in 1-2 verticals","4":"Strong domain expertise","5":"Dominant authority; deep base"}},
-    {"id":25,"key":"quality_of_management","name":"Quality of management","explanation":"How well do they run their business?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Poor — disorganized","2":"Below avg — reactive","3":"Adequate — competent","4":"Strong — proactive, clear strategy","5":"Exceptional — visionary leadership"}},
-    {"id":26,"key":"known_litigation","name":"Known litigation (No=5, Yes=1)","explanation":"Involved in lawsuits?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Active major litigation","2":"Material financial exposure","3":"Minor pending disputes","4":"Past litigation resolved","5":"No known litigation"}},
-    {"id":27,"key":"export_control_ip","name":"Export control & IP protection","explanation":"Complying with provisions?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Known violations","2":"Gaps; no remediation","3":"Generally compliant","4":"Fully compliant; proactive","5":"Best-in-class compliance"}},
-    {"id":28,"key":"financial_strength","name":"Financial strength","explanation":"Cash-flow struggles or strong margins?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Severe cash-flow issues","2":"Thin margins; credit concerns","3":"Stable but modest","4":"Healthy margins; consistent profit","5":"Very strong; well-capitalized"}},
+    {"id":7,"key":"avg_deal_size_net_new","name":"Average deal size – net-new logos","explanation":"Average annualized subscription/license value for new customers.","type":"quantitative","unit":"$","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"5000"},"2":{"min":"5001","max":"15000"},"3":{"min":"15001","max":"40000"},"4":{"min":"40001","max":"100000"},"5":{"min":"100001","max":""}}},
+    {"id":8,"key":"avg_deal_size_renewals","name":"Average deal size – renewals","explanation":"Average annualized subscription/license value for renewal customers.","type":"quantitative","unit":"$","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"5000"},"2":{"min":"5001","max":"15000"},"3":{"min":"15001","max":"40000"},"4":{"min":"40001","max":"100000"},"5":{"min":"100001","max":""}}},
+    {"id":9,"key":"avg_time_to_close","name":"Average time to close – net new logos","explanation":"Deal registration to signed subscription/EULA for new customers.","type":"quantitative","unit":"days","direction":"lower_is_better","cat":"Sales Performance","defaults":{"1":{"min":"181","max":""},"2":{"min":"121","max":"180"},"3":{"min":"61","max":"120"},"4":{"min":"31","max":"60"},"5":{"min":"0","max":"30"}}},
+    {"id":10,"key":"registered_deals","name":"Registered deals","explanation":"Number of deals registered with vendor.","type":"quantitative","unit":"count","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"5"},"2":{"min":"6","max":"15"},"3":{"min":"16","max":"30"},"4":{"min":"31","max":"60"},"5":{"min":"61","max":""}}},
+    {"id":11,"key":"win_loss_ratio","name":"Win/loss ratio","explanation":"% of registered deals that closed.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"10"},"2":{"min":"10","max":"25"},"3":{"min":"25","max":"40"},"4":{"min":"40","max":"60"},"5":{"min":"60","max":"100"}}},
+    {"id":12,"key":"partner_generated_opps_pct","name":"Partner Generated Opps as % of Pipeline","explanation":"Partner-generated vs. vendor leads.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":{"min":"0","max":"10"},"2":{"min":"10","max":"25"},"3":{"min":"25","max":"50"},"4":{"min":"50","max":"75"},"5":{"min":"75","max":"100"}}},
+    {"id":13,"key":"frequency_of_business","name":"Frequency of business","explanation":"Steady flow or seasonal?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Sales Performance","defaults":{"1":"Sporadic — 1-2 transactions/year","2":"Seasonal — clustered in 1-2 quarters","3":"Moderate — activity most quarters","4":"Consistent — monthly or near-monthly","5":"Highly active — continuous deal flow"}},
+    {"id":14,"key":"renewal_rate","name":"Renewal rate","explanation":"% of subscriptions renewed.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Retention & Satisfaction","defaults":{"1":{"min":"0","max":"60"},"2":{"min":"60","max":"75"},"3":{"min":"75","max":"85"},"4":{"min":"85","max":"93"},"5":{"min":"93","max":"100"}}},
+    {"id":15,"key":"customer_satisfaction","name":"Customer satisfaction","explanation":"NPS or satisfaction measurement.","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Retention & Satisfaction","defaults":{"1":"No measurement; frequent complaints","2":"Anecdotal only; some dissatisfaction","3":"Measured informally; average","4":"Formal NPS/CSAT; consistently positive","5":"Industry-leading; referenceable customers"}},
+    {"id":16,"key":"communication_with_vendor","name":"Communication with vendor","explanation":"Quality of communications — calls, QBRs, visits.","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Retention & Satisfaction","defaults":{"1":"Unresponsive — hard to reach","2":"Reactive only","3":"Periodic — monthly calls, no QBR","4":"Strong — regular cadence, QBRs","5":"Exemplary — weekly touchpoints, exec visits"}},
+    {"id":17,"key":"mdf_utilization_rate","name":"MDF utilization rate","explanation":"Using vendor-sponsored marketing funds?","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":{"min":"0","max":"20"},"2":{"min":"20","max":"40"},"3":{"min":"40","max":"60"},"4":{"min":"60","max":"80"},"5":{"min":"80","max":"100"}}},
+    {"id":18,"key":"quality_of_sales_org","name":"Quality of sales organization","explanation":"Do they need more guidance?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":"Weak — no dedicated reps","2":"Below average — lack product knowledge","3":"Adequate — average metrics","4":"Strong — good pipeline management","5":"Excellent — top-tier, consistently high"}},
+    {"id":19,"key":"vendor_certifications","name":"Vendor certification(s)","explanation":"Investing in your technology?","type":"quantitative","unit":"certs","direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":{"min":"0","max":"0"},"2":{"min":"1","max":"2"},"3":{"min":"3","max":"5"},"4":{"min":"6","max":"10"},"5":{"min":"11","max":""}}},
+    {"id":20,"key":"sales_support_calls","name":"Sales support calls received","explanation":"Big pipeline or can't sell?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":"Excessive — lack of knowledge","2":"Frequent routine questions","3":"Moderate — mixed","4":"Mostly deal-strategy-driven","5":"Rare — complex high-value only"}},
+    {"id":21,"key":"tech_support_calls","name":"Tech support calls received","explanation":"Lack of training?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Enablement & Support","defaults":{"1":"Excessive — training gaps","2":"Frequent — certs should cover","3":"Average — occasional escalations","4":"Low — complex edge cases","5":"Minimal — self-sufficient"}},
+    {"id":22,"key":"dedication_vs_competitive","name":"Dedication vs. competitive products","explanation":"Strategic vendor or afterthought?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":"Sells competitor as primary","2":"Competitor default; you by request","3":"Sells both equally","4":"You preferred; competitor secondary","5":"Exclusively sells your solution"}},
+    {"id":23,"key":"dedication_vs_other_vendors","name":"Dedication vs. other vendors","explanation":"% of business your solution represents.","type":"quantitative","unit":"%","direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":{"min":"0","max":"5"},"2":{"min":"5","max":"15"},"3":{"min":"15","max":"30"},"4":{"min":"30","max":"50"},"5":{"min":"50","max":"100"}}},
+    {"id":24,"key":"geographical_coverage","name":"Geographical market coverage","explanation":"Right-sized territory?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":"Very limited local presence","2":"Small territory; gaps","3":"Adequate regional coverage","4":"Strong multi-region, aligned","5":"National/intl or dominant"}},
+    {"id":25,"key":"vertical_coverage","name":"Vertical market coverage","explanation":"Specialize in verticals?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Strategic Fit","defaults":{"1":"No vertical focus","2":"Emerging in 1 vertical","3":"Established in 1-2 verticals","4":"Strong domain expertise","5":"Dominant authority; deep base"}},
+    {"id":26,"key":"quality_of_management","name":"Quality of management","explanation":"How well do they run their business?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Poor — disorganized","2":"Below avg — reactive","3":"Adequate — competent","4":"Strong — proactive, clear strategy","5":"Exceptional — visionary leadership"}},
+    {"id":27,"key":"known_litigation","name":"Known litigation (No=5, Yes=1)","explanation":"Involved in lawsuits?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Active major litigation","2":"Material financial exposure","3":"Minor pending disputes","4":"Past litigation resolved","5":"No known litigation"}},
+    {"id":28,"key":"export_control_ip","name":"Export control & IP protection","explanation":"Complying with provisions?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Known violations","2":"Gaps; no remediation","3":"Generally compliant","4":"Fully compliant; proactive","5":"Best-in-class compliance"}},
+    {"id":29,"key":"financial_strength","name":"Financial strength","explanation":"Cash-flow struggles or strong margins?","type":"qualitative","unit":None,"direction":"higher_is_better","cat":"Risk & Governance","defaults":{"1":"Severe cash-flow issues","2":"Thin margins; credit concerns","3":"Stable but modest","4":"Healthy margins; consistent profit","5":"Very strong; well-capitalized"}},
 ]
 CATEGORIES = [
     {"label":"Revenue & Growth","icon":"💰","keys":["annual_revenues","yoy_revenue_growth","net_new_logo_revenues","pct_revenues_saas","net_revenue_expansion","total_revenues"]},
-    {"label":"Sales Performance","icon":"📈","keys":["average_deal_size","avg_time_to_close","registered_deals","win_loss_ratio","partner_generated_opps_pct","frequency_of_business"]},
+    {"label":"Sales Performance","icon":"📈","keys":["avg_deal_size_net_new","avg_deal_size_renewals","avg_time_to_close","registered_deals","win_loss_ratio","partner_generated_opps_pct","frequency_of_business"]},
     {"label":"Retention & Satisfaction","icon":"🤝","keys":["renewal_rate","customer_satisfaction","communication_with_vendor"]},
     {"label":"Enablement & Support","icon":"🎓","keys":["mdf_utilization_rate","quality_of_sales_org","vendor_certifications","sales_support_calls","tech_support_calls"]},
     {"label":"Strategic Fit","icon":"🧭","keys":["dedication_vs_competitive","dedication_vs_other_vendors","geographical_coverage","vertical_coverage"]},
@@ -111,6 +112,28 @@ def _client_path(): return _current_data_dir() / "client_info.json"
 def _csv_path(): return _current_data_dir() / "all_partners.csv"
 def _class_path(): return _current_data_dir() / "classification_config.json"
 def _raw_path(): return _current_data_dir() / "all_partners_raw.json"
+def _tenant_config_path(tid=None):
+    if tid:
+        return _tenant_dir(tid) / "tenant_config.json"
+    return _current_data_dir() / "tenant_config.json"
+
+def _load_tenant_config(tid=None):
+    tp = _tenant_config_path(tid)
+    if tp.exists():
+        try: return json.loads(tp.read_text())
+        except: pass
+    return {}
+
+def _save_tenant_config(cfg, tid=None):
+    _tenant_config_path(tid).write_text(json.dumps(cfg, indent=2))
+
+def _max_partners():
+    """Return max partner limit for current tenant (0 = unlimited)."""
+    return _load_tenant_config().get("max_partners", 0)
+
+def _partner_count():
+    """Return current number of partners."""
+    return len(_load_partners())
 
 def _sf(val):
     if val is None: return None
@@ -189,13 +212,21 @@ def _logo():
     st.markdown(f'<img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;margin-bottom:8px;">',unsafe_allow_html=True)
 
 def _brand():
-    # Ensure client_info is loaded (may be missing after page switch)
-    if "client_info" not in st.session_state:
+    # Always ensure client_info is loaded with logo from tenant file
+    ci = st.session_state.get("client_info")
+    if not ci or not ci.get("logo_url"):
         cp = _client_path()
         if cp.exists():
-            try: st.session_state["client_info"] = json.loads(cp.read_text())
-            except: st.session_state["client_info"] = {}
-    logo_url = st.session_state.get("client_info",{}).get("logo_url","")
+            try:
+                disk_ci = json.loads(cp.read_text())
+                if disk_ci.get("logo_url"):
+                    if ci:
+                        ci["logo_url"] = disk_ci["logo_url"]
+                    else:
+                        st.session_state["client_info"] = disk_ci
+                        ci = disk_ci
+            except: pass
+    logo_url = (ci or {}).get("logo_url", "")
     right_logo = f'<img src="{logo_url}" style="max-height:50px;border-radius:6px;" onerror="this.style.display=\'none\'">' if logo_url else ''
     st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div><div style="margin-left:auto;">{right_logo}</div></div>',unsafe_allow_html=True)
 
@@ -558,7 +589,7 @@ def _gen_xlsx(partners, enabled_metrics):
 # ═════════════════════════════════════════════════════════════════════════
 # CLASSIFICATION ENGINE — 3 quadrants + Long Tail
 # ═════════════════════════════════════════════════════════════════════════
-METRIC_ALIASES = {"total company revenues":"total_revenues","annual vendor revenues":"annual_revenues","annual revenues":"annual_revenues","y-y growth rate":"yoy_revenue_growth","y-y revenue growth":"yoy_revenue_growth","year-on-year revenue growth":"yoy_revenue_growth","net new logo growth":"net_new_logo_revenues","net-new logo revenues":"net_new_logo_revenues","# of known competitors":None,"your product ranking":None}
+METRIC_ALIASES = {"total company revenues":"total_revenues","annual vendor revenues":"annual_revenues","annual revenues":"annual_revenues","y-y growth rate":"yoy_revenue_growth","y-y revenue growth":"yoy_revenue_growth","year-on-year revenue growth":"yoy_revenue_growth","net new logo growth":"net_new_logo_revenues","net-new logo revenues":"net_new_logo_revenues","# of known competitors":None,"your product ranking":None,"average deal size":"avg_deal_size_net_new","average time to close":"avg_time_to_close"}
 for _m in SCORECARD_METRICS:
     METRIC_ALIASES[_m["key"]]=_m["key"]; METRIC_ALIASES[_m["name"].lower()]=_m["key"]
 
@@ -710,6 +741,7 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 .login-box{max-width:420px;margin:80px auto;background:#fff;border-radius:16px;padding:40px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
 .tenant-badge{display:inline-block;padding:4px 12px;border-radius:8px;font-size:.82rem;font-weight:700;background:#2563eb;color:#fff;margin-bottom:8px}
 .plist-item{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border:1px solid #e2e6ed;border-radius:8px;margin:4px 0;background:#fff;font-size:.88rem}
+section[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"]{background:#dc4040!important;border-color:#dc4040!important;color:#fff!important;font-weight:800!important}
 </style>
 """, unsafe_allow_html=True)
 
@@ -783,7 +815,7 @@ with st.sidebar:
         st.markdown('<span class="tenant-badge">ADMIN</span>', unsafe_allow_html=True)
     elif active_tenant:
         st.markdown(f'<span class="tenant-badge">{active_tenant}</span>', unsafe_allow_html=True)
-    if st.button("🚪 Sign Out", use_container_width=True):
+    if st.button("🚪 Sign Out", use_container_width=True, type="primary"):
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
     st.markdown("---")
@@ -822,7 +854,9 @@ with st.sidebar:
         st.metric("Active Metrics",len(en))
         partners=_load_partners()
         # Clickable partner count → expandable list with delete
-        with st.expander(f"📋 Partners Scored: **{len(partners)}**"):
+        mp_limit = _max_partners()
+        limit_lbl = f" / {mp_limit}" if mp_limit else ""
+        with st.expander(f"📋 Partners Scored: **{len(partners)}{limit_lbl}**"):
             if partners:
                 # PAM filter
                 pam_names = sorted(set(p.get("pam_name","").strip() for p in partners if p.get("pam_name","").strip()))
@@ -1134,6 +1168,8 @@ elif page=="Step 2 — Score a Partner":
                     st.error("Enter a partner name first.")
                 elif _partner_exists(pname):
                     st.error(f"A partner named **{pname}** already exists. Use a unique name.")
+                elif _max_partners() and _partner_count() >= _max_partners():
+                    st.error(f"Partner limit reached (**{_max_partners()}**). Contact your admin to increase the limit.")
                 else:
                     row, raw_dict = _build_row_raw()
                     _append_partner(row, raw_dict)
@@ -1475,8 +1511,9 @@ elif page=="Import Data":
         do_import = st.button("📥  Import Partners", use_container_width=True, type="primary")
 
     if do_import:
-        created = 0; updated = 0; error_rows = []
+        created = 0; updated = 0; error_rows = []; skipped_limit = 0
         existing_names = {p.get("partner_name","").strip().lower() for p in _load_partners()}
+        max_p = _max_partners(); current_count = len(existing_names)
         progress = st.progress(0, text="Importing...")
 
         for row_idx, row in df.iterrows():
@@ -1484,6 +1521,13 @@ elif page=="Import Data":
             pname = str(row.get(partner_col, "")).strip()
             if not pname or pname.lower() in ("nan", "none", ""):
                 error_rows.append({"row": row_idx + 2, "partner": pname, "error": "Missing partner name"})
+                continue
+
+            # Check partner limit for new partners (updates are always allowed)
+            is_new = pname.strip().lower() not in existing_names
+            if is_new and max_p and (current_count + created) >= max_p:
+                skipped_limit += 1
+                error_rows.append({"row": row_idx + 2, "partner": pname, "error": f"Partner limit ({max_p}) reached"})
                 continue
 
             # Build raw dict
@@ -1525,7 +1569,7 @@ elif page=="Import Data":
 
             # Upsert
             try:
-                is_update = pname.strip().lower() in existing_names
+                is_update = not is_new
                 _upsert_partner(row_dict, raw_dict)
                 if is_update:
                     updated += 1
@@ -1545,6 +1589,9 @@ elif page=="Import Data":
         with r1: st.metric("Created", created)
         with r2: st.metric("Updated", updated)
         with r3: st.metric("Errors", len(error_rows))
+
+        if skipped_limit > 0:
+            st.warning(f"⚠️ **{skipped_limit}** partner(s) skipped — partner limit of **{max_p}** reached. Contact your admin to increase the limit.")
 
         if error_rows:
             st.markdown("#### ⚠️ Errors")
@@ -1723,6 +1770,8 @@ elif page=="Partner List":
                 st.error("Partner name is required.")
             elif _partner_exists(new_name):
                 st.error(f"A partner named **{new_name}** already exists.")
+            elif _max_partners() and _partner_count() >= _max_partners():
+                st.error(f"Partner limit reached (**{_max_partners()}**). Contact your admin to increase the limit.")
             else:
                 row = {"partner_name": new_name.strip(), "partner_year": new_year,
                        "partner_tier": new_tier if new_tier != "Please choose..." else "",
@@ -1910,7 +1959,7 @@ elif page=="Admin — Manage Users":
             if tid: _tenant_dir(tid)
             st.session_state["_admin_saved"]=True; st.rerun()
     st.markdown("---")
-    st.markdown("### Tenant Directories")
+    st.markdown("### Tenant Directories & Limits")
     tenants=_all_tenants()
     if tenants:
         for t in tenants:
@@ -1918,7 +1967,18 @@ elif page=="Admin — Manage Users":
             has_criteria=(td/"scoring_criteria.json").exists()
             has_partners=(td/"all_partners.csv").exists()
             pc=len(_load_partners(td/"all_partners.csv")) if has_partners else 0
-            st.markdown(f"**{t}** — {'✅ Criteria' if has_criteria else '⚪ No criteria'} · {pc} partners scored")
+            tcfg = _load_tenant_config(t)
+            mp = tcfg.get("max_partners", 0)
+            limit_str = f"**{mp}**" if mp else "Unlimited"
+            with st.expander(f"**{t}** — {'✅ Criteria' if has_criteria else '⚪ No criteria'} · {pc} partners · Limit: {limit_str}"):
+                new_max = st.number_input(
+                    f"Max partners for **{t}** (0 = unlimited)",
+                    min_value=0, max_value=10000, value=mp, step=5, key=f"adm_maxp_{t}",
+                    help="Set the maximum number of partners this client can score. 0 means unlimited.")
+                if st.button(f"💾 Save limit for {t}", key=f"adm_maxp_btn_{t}"):
+                    tcfg["max_partners"] = new_max
+                    _save_tenant_config(tcfg, t)
+                    st.session_state["_admin_saved"] = True; st.rerun()
     else:
         st.info("No tenant directories yet. Add a client user above to create one.")
 
