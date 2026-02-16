@@ -212,23 +212,28 @@ def _logo():
     st.markdown(f'<img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;margin-bottom:8px;">',unsafe_allow_html=True)
 
 def _brand():
-    # Always ensure client_info is loaded with logo from tenant file
-    ci = st.session_state.get("client_info")
-    if not ci or not ci.get("logo_url"):
-        cp = _client_path()
-        if cp.exists():
+    # Always read logo_url directly from tenant file for reliability
+    logo_url = ""
+    cp = _client_path()
+    if cp.exists():
+        try:
+            disk_ci = json.loads(cp.read_text())
+            logo_url = disk_ci.get("logo_url", "")
+        except: pass
+    # Fall back to session state if file read failed
+    if not logo_url:
+        logo_url = st.session_state.get("client_info", {}).get("logo_url", "")
+
+    if logo_url:
+        left_col, right_col = st.columns([5, 1])
+        with left_col:
+            st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div></div>',unsafe_allow_html=True)
+        with right_col:
             try:
-                disk_ci = json.loads(cp.read_text())
-                if disk_ci.get("logo_url"):
-                    if ci:
-                        ci["logo_url"] = disk_ci["logo_url"]
-                    else:
-                        st.session_state["client_info"] = disk_ci
-                        ci = disk_ci
+                st.image(logo_url, width=80)
             except: pass
-    logo_url = (ci or {}).get("logo_url", "")
-    right_logo = f'<img src="{logo_url}" style="max-height:50px;border-radius:6px;" onerror="this.style.display=\'none\'">' if logo_url else ''
-    st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div><div style="margin-left:auto;">{right_logo}</div></div>',unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;"><img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;"><div><div style="font-size:1.6rem;font-weight:800;color:#1e2a3a;">ChannelPRO</div><div style="font-size:.92rem;color:#4a6a8f;font-weight:600;margin-top:-4px;">Partner Revenue Optimizer</div></div></div>',unsafe_allow_html=True)
 
 # ─── Raw-value storage for re-scoring ────────────────────────────────
 def _save_raw(partner_raw):
