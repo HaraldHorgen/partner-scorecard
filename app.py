@@ -538,46 +538,21 @@ def _call_ai(messages, api_key):
         return {"answer": f"Error: {str(e)}", "table": None, "chart": None, "updates": None}
 
 def _render_ai_chart(chart_spec):
-    """Render a chart from AI-generated spec. Falls back to st.bar_chart if Altair is unavailable."""
+    """Render a chart from AI-generated spec using native Streamlit charts (no Altair dependency)."""
     if not chart_spec or not chart_spec.get("data"): return
     ctype = chart_spec.get("type", "bar")
     title = chart_spec.get("title", "")
     data = chart_spec["data"]
     df = pd.DataFrame(data)
     if "label" not in df.columns or "value" not in df.columns: return
-
+    if title:
+        st.markdown(f"**{title}**")
+    chart_df = df.set_index("label")
     try:
-        import altair as alt
-        if ctype == "pie":
-            chart = alt.Chart(df).mark_arc(innerRadius=50).encode(
-                theta=alt.Theta("value:Q"),
-                color=alt.Color("label:N", legend=alt.Legend(title="")),
-                tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
-            ).properties(title=title, height=350)
-        elif ctype == "hbar":
-            chart = alt.Chart(df).mark_bar().encode(
-                y=alt.Y("label:N", sort="-x", title=chart_spec.get("y_label","")),
-                x=alt.X("value:Q", title=chart_spec.get("x_label","")),
-                color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
-                tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
-            ).properties(title=title, height=max(len(data)*28, 200))
-        else:  # bar
-            chart = alt.Chart(df).mark_bar().encode(
-                x=alt.X("label:N", sort="-y", axis=alt.Axis(labelAngle=-45, labelLimit=120), title=chart_spec.get("x_label","")),
-                y=alt.Y("value:Q", title=chart_spec.get("y_label","")),
-                color=alt.Color("value:Q", scale=alt.Scale(scheme="blues"), legend=None),
-                tooltip=["label:N", alt.Tooltip("value:Q", format=".1f")]
-            ).properties(title=title, height=350)
-        st.altair_chart(chart, use_container_width=True)
+        st.bar_chart(chart_df)
     except Exception:
-        # Altair unavailable or incompatible — fall back to native Streamlit chart
-        if title:
-            st.markdown(f"**{title}**")
-        chart_df = df.set_index("label")
-        if ctype == "hbar":
-            st.bar_chart(chart_df, horizontal=True)
-        else:
-            st.bar_chart(chart_df)
+        # Ultra-fallback: just show as table
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
 def _apply_ai_updates(updates, cr):
     """Apply score updates from AI response."""
@@ -1434,7 +1409,7 @@ elif page=="Step 3 — Partner Assessment":
             filter="agTextColumnFilter",
             cellStyle={"textAlign": "left"})
 
-        # Metric score columns — number filter + heatmap styling
+        # Metric score columns — number filter + heatmap styling + diagonal header
         for m in em:
             gb.configure_column(
                 m["name"],
@@ -1444,6 +1419,7 @@ elif page=="Step 3 — Partner Assessment":
                 valueFormatter=metric_formatter,
                 minWidth=55, maxWidth=120,
                 headerTooltip=f'{m["name"]} — {m["explanation"]}',
+                headerClass="diag-header",
             )
 
         # Total and Percentage — number filter + dark styling
@@ -1467,9 +1443,12 @@ elif page=="Step 3 — Partner Assessment":
         # Selection (optional — for future "open scorecard" integration)
         gb.configure_selection(selection_mode="single", use_checkbox=False)
 
+        # Set header height for diagonal text
+        gb.configure_grid_options(headerHeight=140)
+
         grid_options = gb.build()
 
-        # Custom CSS to match ChannelPRO theme
+        # Custom CSS to match ChannelPRO™ theme
         custom_css = {
             ".ag-header-cell-label": {"font-size": "0.72rem", "font-weight": "700",
                 "text-transform": "uppercase", "letter-spacing": "0.03em"},
@@ -1482,10 +1461,33 @@ elif page=="Step 3 — Partner Assessment":
             ".ag-row:hover": {"background-color": "#edf2fa !important"},
             ".ag-root-wrapper": {"border-radius": "10px", "border": "1px solid #e2e6ed",
                 "font-family": "'DM Sans', sans-serif"},
+            # Diagonal headers for metric columns
+            ".diag-header": {
+                "position": "relative !important",
+                "overflow": "visible !important",
+            },
+            ".diag-header .ag-header-cell-comp-wrapper": {
+                "position": "absolute !important",
+                "bottom": "4px !important",
+                "left": "4px !important",
+                "transform": "rotate(-55deg)",
+                "transform-origin": "bottom left",
+                "white-space": "nowrap",
+                "overflow": "visible !important",
+                "width": "max-content !important",
+            },
+            ".diag-header .ag-header-cell-label": {
+                "font-size": "0.62rem",
+                "white-space": "nowrap",
+                "overflow": "visible !important",
+            },
+            ".diag-header .ag-header-icon": {
+                "display": "none !important",
+            },
         }
 
-        # Determine height
-        grid_height = min(max(len(df_grid) * 36 + 110, 350), 700)
+        # Determine height (extra 90px for tall diagonal header row)
+        grid_height = min(max(len(df_grid) * 36 + 200, 400), 800)
 
         # Render the grid
         grid_response = AgGrid(
