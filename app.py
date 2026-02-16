@@ -2276,16 +2276,10 @@ elif page=="Ask ChannelPRO™":
     env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if env_key:
         api_key = env_key
-    # 2. Check Streamlit secrets (alternative: .streamlit/secrets.toml or Render secret files)
-    if not api_key:
-        try:
-            api_key = st.secrets.get("ANTHROPIC_API_KEY", "").strip()
-        except Exception:
-            pass
-    # 3. Check session state (persists if user entered it earlier this session)
+    # 2. Check session state (persists if user entered it earlier this session)
     if not api_key:
         api_key = st.session_state.get("_anthropic_api_key", "")
-    # 4. If still empty, ask user to enter it
+    # 3. If still empty, ask user to enter it
     if not api_key:
         api_key = st.text_input("🔑 Enter your Anthropic API key", type="password", key="ai_api_key",
             help="Set ANTHROPIC_API_KEY in Render → Environment → Environment Variables, then **redeploy** the service. Or enter it here for this session.")
