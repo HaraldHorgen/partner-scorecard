@@ -12,6 +12,7 @@ from utils.paths import client_path
 __all__ = [
     "YORK_LOGO_B64", "LOGIN_BG_B64", "inject_css", "logo", "brand",
     "display_styled_assessment_table",
+    "display_classification_dashboard",
 ]
 
 
@@ -435,3 +436,249 @@ def display_styled_assessment_table(df_grid, enabled_metrics):
         allow_unsafe_jscode=True,
         key="p3_aggrid",
     )
+
+
+# ── Classification executive dashboard ────────────────────────────────
+
+def display_classification_dashboard(partners, classification):
+    """Render a dual-visual executive summary above the classification table.
+
+    Left column: **Boston Matrix** (BCG-style 2×2 scatter) mapping every
+    classified partner by *Annual Revenue* score (X) vs *Net-New Logo
+    Revenue* score (Y).  Background quadrants are shaded and labelled
+    Stars / Question Marks / Cash Cows / Dogs.
+
+    Right column: **Donut chart** showing the percentage of partners in
+    each of the four classification categories.
+
+    Both charts use the Plotly interactive toolbar so users can zoom, pan,
+    and download images (PNG) directly.
+
+    Args:
+        partners: list of partner dicts (from ``_load_partners``).
+        classification: dict mapping ``partner_name → quadrant_number``
+                        (1–4), as returned by ``classify_partners``.
+    """
+    import random
+
+    import plotly.graph_objects as go
+
+    from utils.scoring import Q_LABELS
+
+    # ── Build working rows ──────────────────────────────────────────
+    rows: list[dict] = []
+    for p in partners:
+        name = p.get("partner_name", "")
+        if name not in classification:
+            continue
+        qn = classification[name]
+        try:
+            rev = int(p.get("annual_revenues", 0) or 0)
+        except (TypeError, ValueError):
+            rev = 0
+        try:
+            nnl = int(p.get("net_new_logo_revenues", 0) or 0)
+        except (TypeError, ValueError):
+            nnl = 0
+        try:
+            total = int(p.get("total_score", 0) or 0)
+        except (TypeError, ValueError):
+            total = 0
+        try:
+            pct = float(p.get("percentage", 0) or 0)
+        except (TypeError, ValueError):
+            pct = 0.0
+        rows.append({
+            "Partner": name, "Revenue": rev, "New Logos": nnl,
+            "Quadrant": qn, "Total": total, "Pct": pct,
+        })
+
+    if not rows:
+        return
+
+    # Counts per quadrant
+    by_q: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0}
+    for r in rows:
+        by_q[r["Quadrant"]] = by_q.get(r["Quadrant"], 0) + 1
+
+    # ── Plotly config shared by both charts ─────────────────────────
+    _plotly_cfg: dict = {
+        "displayModeBar": True,
+        "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+        "toImageButtonOptions": {
+            "format": "png", "height": 600, "width": 800, "scale": 2,
+        },
+    }
+
+    # ── BOSTON MATRIX (scatter) ──────────────────────────────────────
+    scatter = go.Figure()
+
+    # Quadrant background rectangles (subtle pastel fills)
+    _qshapes = [
+        # top-left: Question Marks
+        dict(x0=0.5, x1=3, y0=3, y1=5.5, fc="rgba(59,130,246,0.08)"),
+        # top-right: Stars
+        dict(x0=3, x1=5.5, y0=3, y1=5.5, fc="rgba(251,191,36,0.10)"),
+        # bottom-left: Dogs
+        dict(x0=0.5, x1=3, y0=0.5, y1=3, fc="rgba(156,163,175,0.08)"),
+        # bottom-right: Cash Cows
+        dict(x0=3, x1=5.5, y0=0.5, y1=3, fc="rgba(34,197,94,0.08)"),
+    ]
+    for s in _qshapes:
+        scatter.add_shape(
+            type="rect", x0=s["x0"], x1=s["x1"], y0=s["y0"], y1=s["y1"],
+            fillcolor=s["fc"], line=dict(width=0), layer="below",
+        )
+
+    # Midpoint dividers
+    scatter.add_hline(y=3, line_dash="dot", line_color="#CBD5E1", line_width=1)
+    scatter.add_vline(x=3, line_dash="dot", line_color="#CBD5E1", line_width=1)
+
+    # Quadrant labels (BCG terminology)
+    _qlabels = [
+        (1.75, 5.3, "\u2753 Question Marks", "#3B82F6"),
+        (4.25, 5.3, "\u2B50 Stars",          "#D97706"),
+        (1.75, 0.7, "\U0001F415 Dogs",       "#9CA3AF"),
+        (4.25, 0.7, "\U0001F404 Cash Cows",  "#16A34A"),
+    ]
+    for lx, ly, ltxt, lc in _qlabels:
+        scatter.add_annotation(
+            x=lx, y=ly, text=ltxt, showarrow=False,
+            font=dict(size=11, color=lc, family="DM Sans"),
+        )
+
+    # Partner dots — one trace per quadrant for legend grouping
+    random.seed(42)  # deterministic jitter for stable layout
+    show_text = len(rows) <= 15
+
+    for qn in (1, 2, 3, 4):
+        ql, qc = Q_LABELS.get(qn, (f"Q{qn}", "#666"))
+        q_rows = [r for r in rows if r["Quadrant"] == qn]
+        if not q_rows:
+            continue
+        x_vals = [r["Revenue"]   + random.uniform(-0.18, 0.18) for r in q_rows]
+        y_vals = [r["New Logos"] + random.uniform(-0.18, 0.18) for r in q_rows]
+        names  = [r["Partner"] for r in q_rows]
+
+        scatter.add_trace(go.Scatter(
+            x=x_vals, y=y_vals,
+            mode="markers+text" if show_text else "markers",
+            name=f"Q{qn}: {ql}",
+            text=names if show_text else None,
+            textposition="top center",
+            textfont=dict(size=9, color="#475569"),
+            marker=dict(
+                color=qc, size=11, opacity=0.85,
+                line=dict(width=1.5, color="#FFFFFF"),
+            ),
+            customdata=[
+                [r["Partner"], r["Revenue"], r["New Logos"],
+                 r["Total"], r["Pct"]]
+                for r in q_rows
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Revenue Score: %{customdata[1]}<br>"
+                "New Logo Score: %{customdata[2]}<br>"
+                "Total: %{customdata[3]}  (%{customdata[4]:.1f}%)"
+                "<extra>Q" + str(qn) + ": " + ql + "</extra>"
+            ),
+        ))
+
+    scatter.update_layout(
+        title=dict(
+            text="Boston Matrix",
+            font=dict(size=15, color="#1E293B", family="DM Sans"),
+            x=0.5, xanchor="center",
+        ),
+        xaxis=dict(
+            title="Annual Revenue Score", range=[0.3, 5.7], dtick=1,
+            gridcolor="#F1F5F9", zeroline=False,
+        ),
+        yaxis=dict(
+            title="Net-New Logo Score", range=[0.3, 5.7], dtick=1,
+            gridcolor="#F1F5F9", zeroline=False,
+        ),
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#FFFFFF",
+        font=dict(family="DM Sans, sans-serif", size=12),
+        height=440,
+        margin=dict(l=50, r=20, t=50, b=80),
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.15,
+            xanchor="center", x=0.5, font=dict(size=10),
+        ),
+        hoverlabel=dict(
+            bgcolor="white", font_size=12, font_family="DM Sans",
+        ),
+    )
+
+    # ── DONUT CHART ─────────────────────────────────────────────────
+    pie_labels, pie_values, pie_colors = [], [], []
+    for qn in (1, 2, 3, 4):
+        ql, qc = Q_LABELS.get(qn, (f"Q{qn}", "#666"))
+        pie_labels.append(f"Q{qn}: {ql}")
+        pie_values.append(by_q.get(qn, 0))
+        pie_colors.append(qc)
+
+    donut = go.Figure(go.Pie(
+        labels=pie_labels,
+        values=pie_values,
+        marker=dict(
+            colors=pie_colors,
+            line=dict(color="#FFFFFF", width=2),
+        ),
+        hole=0.45,
+        textinfo="label+percent",
+        textposition="outside",
+        textfont=dict(size=11, family="DM Sans"),
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Partners: %{value}<br>"
+            "Share: %{percent}"
+            "<extra></extra>"
+        ),
+        pull=[0.03] * 4,
+    ))
+
+    # Total count in the donut hole
+    donut.add_annotation(
+        text=(
+            f"<b>{sum(pie_values)}</b><br>"
+            "<span style='font-size:10px;color:#64748B'>partners</span>"
+        ),
+        x=0.5, y=0.5, showarrow=False,
+        font=dict(size=24, color="#1E293B", family="JetBrains Mono"),
+    )
+
+    donut.update_layout(
+        title=dict(
+            text="Distribution by Category",
+            font=dict(size=15, color="#1E293B", family="DM Sans"),
+            x=0.5, xanchor="center",
+        ),
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#FFFFFF",
+        font=dict(family="DM Sans, sans-serif"),
+        height=440,
+        margin=dict(l=20, r=20, t=50, b=40),
+        showlegend=False,
+    )
+
+    # ── Render side-by-side ─────────────────────────────────────────
+    col_l, col_r = st.columns([1, 1])
+    with col_l:
+        _plotly_cfg["toImageButtonOptions"]["filename"] = "boston_matrix"
+        st.plotly_chart(scatter, use_container_width=True, config=_plotly_cfg)
+    with col_r:
+        _plotly_cfg["toImageButtonOptions"]["filename"] = "classification_dist"
+        st.plotly_chart(donut, use_container_width=True, config=_plotly_cfg)
+
+    # Helpful note if axis metrics are unscored
+    has_data = any(r["Revenue"] > 0 or r["New Logos"] > 0 for r in rows)
+    if not has_data:
+        st.caption(
+            "\u2139\ufe0f  Enable and score **Annual revenues** and "
+            "**Net-new logo revenues** in Step 2 to position partners "
+            "on the Boston Matrix."
+        )
