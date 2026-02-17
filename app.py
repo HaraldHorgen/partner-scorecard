@@ -80,7 +80,6 @@ from utils.ui import (
     logo as _logo,
     brand as _brand,
     display_styled_assessment_table,
-    display_classification_dashboard,
 )
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -1004,7 +1003,6 @@ elif page=="Step 4 — Partner Classification":
     st.markdown("---"); st.markdown("### Classification Results")
     ac=st.session_state["q_config"]; classification=classify_partners(partners,ac,em_keys)
     if not classification: st.info("No partners to classify."); st.stop()
-    display_classification_dashboard(partners, classification)
     by_q={1:[],2:[],3:[],4:[]}
     for pn,qn in classification.items(): by_q.setdefault(qn,[]).append(pn)
     for qn in(1,2,3,4):
