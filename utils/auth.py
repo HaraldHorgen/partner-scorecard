@@ -94,7 +94,7 @@ def handle_login() -> bool:
     st.markdown(
         f"""<div style="background:rgba(255,255,255,0.95);border-radius:16px 16px 0 0;padding:36px 32px 8px 32px;box-shadow:0 -4px 24px rgba(0,0,0,.15);backdrop-filter:blur(10px)">
             <div style="text-align:center;margin-bottom:8px;">
-                <img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;margin-bottom:12px;"><br>
+                <img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="display:block;margin:0 auto 12px;max-height:120px;width:auto;object-fit:contain;">
                 <span style="font-size:1.4rem;font-weight:800;color:#1e2a3a;">ChannelPRO\u2122</span><br>
                 <span style="font-size:.88rem;color:#4a6a8f;">Partner Revenue Optimizer</span>
             </div></div>""",
