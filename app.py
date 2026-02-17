@@ -70,6 +70,7 @@ from utils.scoring import (
     save_criteria as _save_criteria,
     rescore_all as _rescore_all,
     recalculate_benchmarks as _recalculate_benchmarks,
+    calculate_revenue_recovery as _calculate_revenue_recovery,
     classify_partners,
     _sf,
 )
@@ -337,7 +338,7 @@ if "current_page" not in st.session_state:
 # ═════════════════════════════════════════════════════════════════════════
 # SIDEBAR (with clickable partner list + PAM filter)
 # ═════════════════════════════════════════════════════════════════════════
-CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis"]
+CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
 with st.sidebar:
@@ -376,7 +377,7 @@ with st.sidebar:
     st.markdown("---")
 
     chosen_cat = "All Metrics"
-    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Admin — Manage Users","Admin — All Clients"):
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery","Admin — Manage Users","Admin — All Clients"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
     st.markdown("---")
@@ -2548,3 +2549,149 @@ elif page=="Break-even — Detailed Analysis":
     else:
         st.info("Add support cost data in Program Costs and upload partner data to see visualizations.")
 
+
+# ═════════════════════════════════════════════════════════════════════════
+# REVENUE RECOVERY — margin recapture from non-performing longtail
+# ═════════════════════════════════════════════════════════════════════════
+elif page == "Revenue Recovery":
+    _brand()
+    st.markdown("## Strategic Margin Realignment & Revenue Recovery")
+    st.markdown("""<div class="info-box">
+    Identify partners who have been <b>grandfathered into high margins</b> despite low performance
+    on net-new logo generation. Calculate the potential savings if their margin is reset to a
+    baseline rate. Only partners with a <b>Partner Discount</b> (margin %) and
+    <b>Annual Revenue</b> on file are analyzed.</div>""", unsafe_allow_html=True)
+
+    # Gate: need partner data
+    if not _raw_path().exists():
+        st.warning("No partner data found. Import partners first via the **Import Data** page.")
+        st.stop()
+
+    raw_all = _load_raw()
+    if not raw_all:
+        st.warning("No partner data found. Import partners first via the **Import Data** page.")
+        st.stop()
+
+    # ── Controls ──
+    st.markdown("---")
+    st.markdown("### Parameters")
+    ctrl1, ctrl2 = st.columns(2)
+    with ctrl1:
+        nn_threshold = st.number_input(
+            "Net-New Logo Revenue threshold ($)",
+            min_value=0, max_value=10_000_000, value=50_000, step=5_000,
+            help="Partners with net-new logo revenue **below** this amount are flagged as non-performers.",
+            key="rr_nn_threshold",
+        )
+    with ctrl2:
+        baseline_margin = st.number_input(
+            "Proposed baseline margin (%)",
+            min_value=0.0, max_value=100.0, value=10.0, step=1.0,
+            help="The new margin rate to apply to non-performing partners.",
+            key="rr_baseline",
+        )
+
+    # ── Calculation ──
+    df = _calculate_revenue_recovery(raw_all, float(nn_threshold), float(baseline_margin))
+
+    if df.empty:
+        st.info("No non-performing partners found with the current threshold. "
+                "Try lowering the net-new logo revenue threshold or check that partners have "
+                "a **Partner Discount** and **Annual Revenue** on file.")
+        st.stop()
+
+    total_recapture = df["Recapture $"].sum()
+    total_current = df["Current Margin $"].sum()
+    total_proposed = df["New Margin $"].sum()
+    partner_count = len(df)
+
+    # ── Summary cards ──
+    st.markdown("---")
+    st.markdown("### Summary")
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        st.metric("Non-Performing Partners", f"{partner_count:,}")
+    with k2:
+        st.metric("Current Margin Cost", f"${total_current:,.0f}")
+    with k3:
+        st.metric("Proposed Margin Cost", f"${total_proposed:,.0f}")
+    with k4:
+        st.markdown(
+            f'<div style="background:#1b6e23;color:#fff;border-radius:10px;padding:16px 20px;text-align:center;">'
+            f'<div style="font-size:.85rem;opacity:.85;">Total Potential Recapture</div>'
+            f'<div style="font-size:1.8rem;font-weight:700;margin-top:4px;">${total_recapture:,.0f}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Detail table ──
+    st.markdown("---")
+    st.markdown("### Partner Detail")
+
+    # Format for display
+    display_df = df.copy()
+    display_df.index = range(1, len(display_df) + 1)
+    display_df.index.name = "#"
+
+    if HAS_AGGRID:
+        gb = GridOptionsBuilder.from_dataframe(display_df)
+        gb.configure_default_column(resizable=True, sortable=True, filterable=True)
+        gb.configure_column("Partner", pinned="left", width=200)
+        for col in ["Annual Revenue", "Current Margin $", "New Margin $", "Recapture $", "Net-New Logo Revenue"]:
+            gb.configure_column(col, type=["numericColumn"], valueFormatter="'$' + Math.round(value).toLocaleString()")
+        for col in ["Current Margin %", "New Margin %"]:
+            gb.configure_column(col, type=["numericColumn"], valueFormatter="value.toFixed(1) + '%'")
+        gb.configure_column("Recapture $", cellStyle=JsCode("""
+            function(params) {
+                if (params.value > 0) return {'color': '#1b6e23', 'fontWeight': '700'};
+                return {};
+            }
+        """))
+        grid_opts = gb.build()
+        grid_opts["domLayout"] = "autoHeight"
+        AgGrid(display_df, gridOptions=grid_opts, fit_columns_on_grid_load=True,
+               update_mode=GridUpdateMode.NO_UPDATE, columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
+               allow_unsafe_jscode=True)
+    else:
+        # Fallback: HTML table
+        tbl = '<table class="hm-tbl"><thead><tr>'
+        tbl += '<th style="text-align:left">Partner</th>'
+        tbl += '<th>Annual Revenue</th><th>Current %</th><th>Current $</th>'
+        tbl += '<th>New %</th><th>New $</th><th>Recapture $</th><th>Net-New Logo $</th></tr></thead><tbody>'
+        for _, r in display_df.iterrows():
+            recap_color = "#1b6e23" if r["Recapture $"] > 0 else "#dc4040"
+            tbl += (
+                f'<tr>'
+                f'<td style="text-align:left;padding-left:10px">{r["Partner"]}</td>'
+                f'<td>${r["Annual Revenue"]:,.0f}</td>'
+                f'<td>{r["Current Margin %"]:.1f}%</td>'
+                f'<td>${r["Current Margin $"]:,.0f}</td>'
+                f'<td>{r["New Margin %"]:.1f}%</td>'
+                f'<td>${r["New Margin $"]:,.0f}</td>'
+                f'<td style="color:{recap_color};font-weight:700">${r["Recapture $"]:,.0f}</td>'
+                f'<td>${r["Net-New Logo Revenue"]:,.0f}</td>'
+                f'</tr>'
+            )
+        tbl += '</tbody></table>'
+        st.markdown(tbl, unsafe_allow_html=True)
+
+    # ── Total recapture bar (repeat at bottom for prominence) ──
+    st.markdown(
+        f'<div style="background:linear-gradient(135deg,#1b6e23,#2e8b57);color:#fff;border-radius:10px;'
+        f'padding:20px 28px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;">'
+        f'<div><span style="font-size:1.1rem;font-weight:600;">Total Potential Revenue Recapture</span><br>'
+        f'<span style="opacity:.8;font-size:.88rem;">{partner_count} non-performing partner(s) '
+        f'&bull; baseline margin reset to {baseline_margin:.0f}%</span></div>'
+        f'<div style="font-size:2rem;font-weight:800;">${total_recapture:,.0f}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Export ──
+    st.markdown("---")
+    csv_data = df.to_csv(index=False)
+    st.download_button(
+        "Download Report (CSV)",
+        csv_data,
+        file_name="revenue_recovery_report.csv",
+        mime="text/csv",
+        use_container_width=False,
+    )

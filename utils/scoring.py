@@ -497,6 +497,76 @@ def recalculate_benchmarks() -> dict:
     return {"updated": updated_names, "skipped": skipped_names}
 
 
+# ── Revenue Recovery Calculator ───────────────────────────────────────
+
+
+def calculate_revenue_recovery(
+    raw_partners: list[dict],
+    net_new_threshold: float,
+    baseline_margin_pct: float = 10.0,
+) -> pd.DataFrame:
+    """Identify non-performing longtail partners and calculate margin recapture.
+
+    A partner is a *non-performer* when their raw net-new logo revenue is
+    below *net_new_threshold*.
+
+    For each non-performer the function computes:
+    - Current margin cost  = annual_revenue * current_margin%
+    - Proposed margin cost = annual_revenue * baseline_margin%
+    - Recapture            = current - proposed
+
+    Returns a DataFrame sorted by annual revenue descending.  Columns:
+        Partner, Annual Revenue, Current Margin %, Current Margin $,
+        New Margin %, New Margin $, Recapture $, Net-New Logo Revenue
+    """
+    rows: list[dict] = []
+    for rp in raw_partners:
+        # Parse net-new logo revenue
+        nn_val = _sf(rp.get("raw_net_new_logo_revenues"))
+        if nn_val is None:
+            nn_val = 0.0
+        if nn_val >= net_new_threshold:
+            continue  # performing partner — skip
+
+        # Parse annual revenue (try raw first, fall back to total)
+        rev = _sf(rp.get("raw_annual_revenues"))
+        if rev is None:
+            rev = _sf(rp.get("raw_total_revenues"))
+        if rev is None or rev <= 0:
+            continue
+
+        # Parse current margin from partner_discount field
+        margin_pct = _sf(rp.get("partner_discount"))
+        if margin_pct is None or margin_pct <= 0:
+            continue
+
+        current_cost = rev * margin_pct / 100.0
+        proposed_cost = rev * baseline_margin_pct / 100.0
+        recapture = current_cost - proposed_cost
+
+        rows.append({
+            "Partner": rp.get("partner_name", "Unknown"),
+            "Annual Revenue": rev,
+            "Current Margin %": margin_pct,
+            "Current Margin $": current_cost,
+            "New Margin %": baseline_margin_pct,
+            "New Margin $": proposed_cost,
+            "Recapture $": recapture,
+            "Net-New Logo Revenue": nn_val,
+        })
+
+    if not rows:
+        return pd.DataFrame(columns=[
+            "Partner", "Annual Revenue", "Current Margin %",
+            "Current Margin $", "New Margin %", "New Margin $",
+            "Recapture $", "Net-New Logo Revenue",
+        ])
+
+    df = pd.DataFrame(rows)
+    df.sort_values("Annual Revenue", ascending=False, inplace=True, ignore_index=True)
+    return df
+
+
 # ── Classification engine (quadrants) ──────────────────────────────────
 
 DEFAULT_Q_CONFIG = {
