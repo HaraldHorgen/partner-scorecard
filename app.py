@@ -79,6 +79,7 @@ from utils.ui import (
     inject_css,
     logo as _logo,
     brand as _brand,
+    display_styled_assessment_table,
 )
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -813,189 +814,19 @@ elif page=="Step 3 — Partner Assessment":
 
     if HAS_AGGRID:
         # ══════════════════════════════════════════════════════════════
-        # AG-GRID FILTERABLE TABLE
+        # AG-GRID — PROFESSIONAL ALPINE-THEMED TABLE
         # ══════════════════════════════════════════════════════════════
-        st.markdown('<p style="font-size:0.88rem;color:#000;margin-bottom:12px;">💡 Use the filter icons (≡) in each column header to filter. Click any column header to sort. The floating filter row below headers allows quick type-to-filter.</p>', unsafe_allow_html=True)
-
-        # --- JsCode cell style for metric score heatmap (1-5) ---
-        metric_cell_style = JsCode("""
-        function(params) {
-            if (params.value === null || params.value === undefined || params.value === 0) {
-                return {'color': '#ccc', 'textAlign': 'center', 'fontWeight': '700',
-                        'fontFamily': "'JetBrains Mono', monospace", 'fontSize': '0.82rem'};
-            }
-            var v = parseInt(params.value);
-            var bg = '#f0f0f0'; var fg = '#333';
-            if (v === 1)      { bg = '#FA7A7A'; fg = '#fff'; }
-            else if (v === 2) { bg = '#FFFFCC'; fg = '#333'; }
-            else if (v === 3) { bg = '#FFFFCC'; fg = '#333'; }
-            else if (v === 4) { bg = '#C6EFCE'; fg = '#1b6e23'; }
-            else if (v === 5) { bg = '#C6EFCE'; fg = '#1b6e23'; }
-            return {'backgroundColor': bg, 'color': fg, 'textAlign': 'center',
-                    'fontWeight': '700', 'fontFamily': "'JetBrains Mono', monospace",
-                    'fontSize': '0.82rem'};
-        }
-        """)
-
-        # --- JsCode cell style for Grade column ---
-        grade_cell_style = JsCode("""
-        function(params) {
-            var g = params.value;
-            var bg = '#dc4040'; var fg = '#fff';
-            if (g === 'A')       { bg = '#1b6e23'; }
-            else if (g === 'B+') { bg = '#49a34f'; }
-            else if (g === 'B')  { bg = '#6aab2e'; }
-            else if (g === 'C+') { bg = '#d4a917'; fg = '#333'; }
-            else if (g === 'C')  { bg = '#e8820c'; }
-            else                 { bg = '#dc4040'; }
-            return {'backgroundColor': bg, 'color': fg, 'textAlign': 'center',
-                    'fontWeight': '800', 'fontFamily': "'JetBrains Mono', monospace",
-                    'fontSize': '0.88rem', 'borderRadius': '4px'};
-        }
-        """)
-
-        # --- JsCode cell style for Total and Pct columns ---
-        total_cell_style = JsCode("""
-        function(params) {
-            return {'backgroundColor': '#1e2a3a', 'color': '#fff', 'textAlign': 'center',
-                    'fontWeight': '800', 'fontFamily': "'JetBrains Mono', monospace",
-                    'fontSize': '0.85rem'};
-        }
-        """)
-
-        # --- JsCode formatter: show "—" for 0 scores ---
-        metric_formatter = JsCode("""
-        function(params) {
-            if (params.value === null || params.value === undefined || params.value === 0) return '—';
-            return params.value;
-        }
-        """)
-
-        # --- JsCode formatter: show % suffix ---
-        pct_formatter = JsCode("""
-        function(params) {
-            if (params.value === null || params.value === undefined) return '0.0%';
-            return params.value.toFixed(1) + '%';
-        }
-        """)
-
-        # --- Build grid options ---
-        gb = GridOptionsBuilder.from_dataframe(df_grid)
-
-        # Global defaults
-        gb.configure_default_column(
-            filterable=True, sortable=True, resizable=True,
-            floatingFilter=True, minWidth=70,
-            suppressMenu=False
+        st.markdown(
+            '<p style="font-size:0.88rem;color:#475569;margin-bottom:12px;">'
+            'Use the filter icons in each column header to filter. '
+            'Click any header to sort. Metrics are grouped by category \u2014 '
+            'scroll horizontally to see all groups. '
+            '<b>Partner</b> is pinned left; '
+            '<b>Total / Score% / Grade</b> are pinned right.</p>',
+            unsafe_allow_html=True,
         )
 
-        # --- Configure individual columns ---
-        # Text columns — text filter
-        gb.configure_column("Partner", pinned="left", minWidth=180, maxWidth=280,
-            filter="agTextColumnFilter",
-            cellStyle={"textAlign": "left", "fontWeight": "600", "paddingLeft": "10px"})
-        gb.configure_column("Country", minWidth=100, maxWidth=140,
-            filter="agTextColumnFilter")
-        gb.configure_column("Tier", minWidth=80, maxWidth=120,
-            filter="agSetColumnFilter")
-        gb.configure_column("Discount", minWidth=90, maxWidth=120,
-            filter="agTextColumnFilter")
-        gb.configure_column("PAM", minWidth=140, maxWidth=200,
-            filter="agTextColumnFilter",
-            cellStyle={"textAlign": "left"})
-
-        # Metric score columns — number filter + heatmap styling + diagonal header
-        for m in em:
-            gb.configure_column(
-                m["name"],
-                type=["numericColumn"],
-                filter="agNumberColumnFilter",
-                cellStyle=metric_cell_style,
-                valueFormatter=metric_formatter,
-                minWidth=55, maxWidth=120,
-                headerTooltip=f'{m["name"]} — {m["explanation"]}',
-                headerClass="diag-header",
-            )
-
-        # Total and Percentage — number filter + dark styling
-        gb.configure_column("Total", type=["numericColumn"],
-            filter="agNumberColumnFilter", cellStyle=total_cell_style,
-            minWidth=70, maxWidth=90, sort="desc")
-        gb.configure_column("Pct", type=["numericColumn"], header_name="Score %",
-            filter="agNumberColumnFilter", cellStyle=total_cell_style,
-            valueFormatter=pct_formatter,
-            minWidth=80, maxWidth=100)
-
-        # Grade — set filter (dropdown) + color styling
-        gb.configure_column("Grade", filter="agSetColumnFilter",
-            cellStyle=grade_cell_style,
-            minWidth=75, maxWidth=90)
-
-        # Pagination for large datasets
-        if len(df_grid) > 50:
-            gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=50)
-
-        # Selection (optional — for future "open scorecard" integration)
-        gb.configure_selection(selection_mode="single", use_checkbox=False)
-
-        # Set header height for diagonal text
-        gb.configure_grid_options(headerHeight=140)
-
-        grid_options = gb.build()
-
-        # Custom CSS to match ChannelPRO™ theme
-        custom_css = {
-            ".ag-header-cell-label": {"font-size": "0.72rem", "font-weight": "700",
-                "text-transform": "uppercase", "letter-spacing": "0.03em"},
-            ".ag-header-row": {"background-color": "#1e2a3a !important"},
-            ".ag-header-cell": {"background-color": "#1e2a3a !important", "color": "#fff !important",
-                "border-right": "1px solid #2a3d57 !important"},
-            ".ag-floating-filter-input": {"font-size": "0.78rem"},
-            ".ag-row-even": {"background-color": "#fafbfd"},
-            ".ag-row-odd": {"background-color": "#ffffff"},
-            ".ag-row:hover": {"background-color": "#edf2fa !important"},
-            ".ag-root-wrapper": {"border-radius": "10px", "border": "1px solid #e2e6ed",
-                "font-family": "'DM Sans', sans-serif"},
-            # Diagonal headers for metric columns
-            ".diag-header": {
-                "position": "relative !important",
-                "overflow": "visible !important",
-            },
-            ".diag-header .ag-header-cell-comp-wrapper": {
-                "position": "absolute !important",
-                "bottom": "4px !important",
-                "left": "4px !important",
-                "transform": "rotate(-55deg)",
-                "transform-origin": "bottom left",
-                "white-space": "nowrap",
-                "overflow": "visible !important",
-                "width": "max-content !important",
-            },
-            ".diag-header .ag-header-cell-label": {
-                "font-size": "0.62rem",
-                "white-space": "nowrap",
-                "overflow": "visible !important",
-            },
-            ".diag-header .ag-header-icon": {
-                "display": "none !important",
-            },
-        }
-
-        # Determine height (extra 90px for tall diagonal header row)
-        grid_height = min(max(len(df_grid) * 36 + 200, 400), 800)
-
-        # Render the grid
-        grid_response = AgGrid(
-            df_grid,
-            gridOptions=grid_options,
-            custom_css=custom_css,
-            height=grid_height,
-            theme="streamlit",
-            update_mode=GridUpdateMode.SELECTION_CHANGED,
-            columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
-            allow_unsafe_jscode=True,
-            key="p3_aggrid",
-        )
+        grid_response = display_styled_assessment_table(df_grid, em)
 
         # --- Handle row selection → open scorecard ---
         selected_rows = grid_response.get("selected_rows", None)
