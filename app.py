@@ -69,6 +69,7 @@ from utils.scoring import (
     ensure_criteria_complete as _ensure_criteria_complete,
     save_criteria as _save_criteria,
     rescore_all as _rescore_all,
+    recalculate_benchmarks as _recalculate_benchmarks,
     classify_partners,
     _sf,
 )
@@ -575,6 +576,27 @@ elif page=="Step 1 — Scoring Criteria":
         _save_criteria(); st.session_state["_p1_saved"]=True
         if p1n: st.session_state["current_page"]="Step 2 — Score a Partner"
         st.rerun()
+
+    # ── Auto-calculate from data ──
+    if _raw_path().exists():
+        st.markdown("---")
+        st.markdown("#### 📐 Auto-Calculate from Partner Data")
+        st.caption("Analyze your imported partner data and set quintile-based ranges automatically. Qualitative metrics are not affected.")
+
+        if st.session_state.get("_bench_result_p1"):
+            res = st.session_state.pop("_bench_result_p1")
+            if res["updated"]:
+                st.success(f"Benchmarks recalculated — **{len(res['updated'])}** metric(s) updated. All partners re-scored.")
+            else:
+                st.info("No quantitative metrics were changed.")
+
+        _, _, bc = st.columns([2, 2, 1])
+        with bc:
+            if st.button("📐  Recalculate Benchmarks", use_container_width=True, key="p1_bench"):
+                with st.spinner("Analyzing partner data distributions..."):
+                    result = _recalculate_benchmarks()
+                st.session_state["_bench_result_p1"] = result
+                st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -1483,6 +1505,44 @@ elif page=="Import Data":
             if preview_rows:
                 preview_df = pd.DataFrame(preview_rows)
                 st.dataframe(preview_df, use_container_width=True, hide_index=True)
+
+    # ── Recalculate Benchmarks ──
+    if _raw_path().exists():
+        st.markdown("---")
+        st.markdown("### 📐 Recalculate Scoring Benchmarks")
+        st.markdown("""<div class="info-box">
+        Analyze the distribution of your imported partner data and automatically set
+        <b>quintile-based scoring ranges</b> (1–5) for all quantitative metrics.
+        This replaces the manual thresholds in Step 1 with data-driven boundaries
+        where each score bucket contains roughly 20% of your partners.<br><br>
+        <b>Qualitative</b> metrics (descriptors) are not affected.
+        </div>""", unsafe_allow_html=True)
+
+        raw_all = _load_raw()
+        st.caption(f"Partner data available: **{len(raw_all)}** partners")
+
+        if st.session_state.get("_bench_result"):
+            res = st.session_state.pop("_bench_result")
+            if res["updated"]:
+                st.markdown(f'<div class="toast">✅ Benchmarks recalculated — **{len(res["updated"])}** metric(s) updated, all partners re-scored</div>', unsafe_allow_html=True)
+                with st.expander("Updated metrics", expanded=False):
+                    for name in res["updated"]:
+                        st.markdown(f"- {name}")
+            else:
+                st.info("No quantitative metrics were changed (not enough data variation or no mapped metrics).")
+            if res["skipped"]:
+                with st.expander(f"Unchanged metrics ({len(res['skipped'])})", expanded=False):
+                    for name in res["skipped"]:
+                        st.markdown(f"- {name}")
+
+        _, _, bench_col = st.columns([2, 2, 1])
+        with bench_col:
+            do_bench = st.button("📐  Recalculate Benchmarks", use_container_width=True, type="secondary")
+        if do_bench:
+            with st.spinner("Analyzing partner data distributions..."):
+                result = _recalculate_benchmarks()
+            st.session_state["_bench_result"] = result
+            st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
