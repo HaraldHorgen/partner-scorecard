@@ -605,7 +605,7 @@ def _gen_xlsx(partners, enabled_metrics):
         from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     except ImportError: return None
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Partner Assessment"
-    fills={1:PatternFill(start_color="FA7A7A",end_color="FA7A7A",fill_type="solid"),2:PatternFill(start_color="FFFFCC",end_color="FFFFCC",fill_type="solid"),3:PatternFill(start_color="FFFFCC",end_color="FFFFCC",fill_type="solid"),4:PatternFill(start_color="C6EFCE",end_color="C6EFCE",fill_type="solid"),5:PatternFill(start_color="C6EFCE",end_color="C6EFCE",fill_type="solid")}
+    fills={1:PatternFill(start_color="FA7A7A",end_color="FA7A7A",fill_type="solid"),2:PatternFill(start_color="FA7A7A",end_color="FA7A7A",fill_type="solid"),3:PatternFill(start_color="FFFFCC",end_color="FFFFCC",fill_type="solid"),4:PatternFill(start_color="C6EFCE",end_color="C6EFCE",fill_type="solid"),5:PatternFill(start_color="C6EFCE",end_color="C6EFCE",fill_type="solid")}
     hf=PatternFill(start_color="1E2A3A",end_color="1E2A3A",fill_type="solid"); hfont=Font(color="FFFFFF",bold=True,size=10)
     bdr=Border(left=Side(style="thin",color="CCCCCC"),right=Side(style="thin",color="CCCCCC"),top=Side(style="thin",color="CCCCCC"),bottom=Side(style="thin",color="CCCCCC"))
     headers=["Rank","Partner Name","Tier","PAM","City","Country"]+[m["name"] for m in enabled_metrics]+["Total","%"]
@@ -814,17 +814,26 @@ if st.session_state["auth_user"] is None:
     [data-testid="stAppViewContainer"]{{background:url('data:image/jpeg;base64,{LOGIN_BG_B64}') center center/cover no-repeat fixed !important}}
     [data-testid="stAppViewContainer"]::before{{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,18,36,0.45);z-index:0;pointer-events:none}}
     </style>""", unsafe_allow_html=True)
-    st.markdown(f"""<div class="login-box">
-        <div style="text-align:center;margin-bottom:24px;">
+    st.markdown("""<style>
+    .login-form-wrapper [data-testid="stForm"]{background:rgba(255,255,255,0.95);border-radius:0 0 16px 16px;padding:24px 36px 32px 36px;box-shadow:0 4px 24px rgba(0,0,0,.25);backdrop-filter:blur(10px);border:none}
+    .login-form-wrapper .stCaption{text-align:center}
+    </style>""", unsafe_allow_html=True)
+    st.markdown(f"""<div style="max-width:380px;margin:0 auto;background:rgba(255,255,255,0.95);border-radius:16px 16px 0 0;padding:36px 36px 8px 36px;box-shadow:0 -4px 24px rgba(0,0,0,.15);backdrop-filter:blur(10px)">
+        <div style="text-align:center;margin-bottom:8px;">
             <img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;margin-bottom:12px;"><br>
             <span style="font-size:1.4rem;font-weight:800;color:#1e2a3a;">ChannelPRO\u2122</span><br>
             <span style="font-size:.88rem;color:#4a6a8f;">Partner Revenue Optimizer</span>
         </div></div>""", unsafe_allow_html=True)
     users = _load_users()
-    with st.form("login_form"):
-        uname = st.text_input("Username", placeholder="Enter your username")
-        pw = st.text_input("Password", type="password", placeholder="Enter your password")
-        submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+    _log_spacer_l, _log_center, _log_spacer_r = st.columns([1.2, 2, 1.2])
+    with _log_center:
+        _login_wrap = st.container()
+        _login_wrap.markdown('<div class="login-form-wrapper">', unsafe_allow_html=True)
+        with _login_wrap.form("login_form"):
+            uname = st.text_input("Username", placeholder="Enter your username")
+            pw = st.text_input("Password", type="password", placeholder="Enter your password")
+            submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+        _login_wrap.markdown('</div>', unsafe_allow_html=True)
     if submitted:
         if uname in users and _verify_pw(pw, users[uname]["password_hash"]):
             st.session_state["auth_user"] = uname
@@ -1863,12 +1872,27 @@ elif page=="Import Data":
         if sel != "— None —":
             metric_mapping[m["key"]] = sel
 
-    # Summary
+    # Summary — highlight unmapped fields
     st.markdown("---")
     mapped_count = len(metric_mapping)
+    unmapped_metrics = [m["name"] for m in em if m["key"] not in metric_mapping]
+    unmapped_details = [label for (label, field, _) in detail_fields if field not in detail_mapping]
     st.markdown(f"**Mapped:** {mapped_count}/{len(em)} metrics  •  Partner column: **{partner_col}**")
+    if unmapped_metrics:
+        um_list = ", ".join(f"<b>{n}</b>" for n in unmapped_metrics)
+        st.markdown(f'<div style="background:#FFF3CD;border-left:4px solid #FFA500;padding:12px 16px;border-radius:6px;margin:8px 0;font-size:.92rem;">'
+                    f'⚠️ <b>Unmapped metrics ({len(unmapped_metrics)}):</b> {um_list}<br>'
+                    f'<span style="color:#6a5a00;font-size:.84rem;">These will be left blank — you can score them manually later.</span></div>', unsafe_allow_html=True)
+    if unmapped_details:
+        ud_list = ", ".join(f"<b>{n}</b>" for n in unmapped_details)
+        st.markdown(f'<div style="background:#E8F0FE;border-left:4px solid #4285F4;padding:12px 16px;border-radius:6px;margin:8px 0;font-size:.92rem;">'
+                    f'ℹ️ <b>Unmapped detail fields ({len(unmapped_details)}):</b> {ud_list}</div>', unsafe_allow_html=True)
     if mapped_count == 0:
-        st.caption("ℹ️ No metrics mapped — partners will be created with blank scores for manual entry.")
+        st.markdown('<div style="background:#FDEDED;border-left:4px solid #D93025;padding:12px 16px;border-radius:6px;margin:8px 0;font-size:.92rem;">'
+                    '🔴 <b>No metrics mapped</b> — partners will be created with blank scores for manual entry.</div>', unsafe_allow_html=True)
+    elif not unmapped_metrics and not unmapped_details:
+        st.markdown('<div style="background:#E6F4EA;border-left:4px solid #34A853;padding:12px 16px;border-radius:6px;margin:8px 0;font-size:.92rem;">'
+                    '✅ <b>All fields mapped!</b> Ready to import.</div>', unsafe_allow_html=True)
 
     # ── Process import ──
     st.markdown("---")
