@@ -572,9 +572,10 @@ elif page=="Step 1 — Scoring Criteria":
                         st.markdown(f'<div class="sb sb{s}">{s}</div>',unsafe_allow_html=True)
                         st.text_area("desc",value=cr["descriptors"][s],key=f"p1_{mk}_s{s}_desc",height=100,label_visibility="collapsed")
         st.markdown("---")
+        st.markdown('<style>[data-testid="stForm"] [data-testid="stFormSubmitButton"]:last-child button{background:#dc4040!important;border-color:#dc4040!important;color:#fff!important;font-weight:800!important}</style>',unsafe_allow_html=True)
         _,cm,cr=st.columns([2,1,1])
-        with cm: p1s=st.form_submit_button("💾  Save Criteria",use_container_width=True,type="primary")
-        with cr: p1n=st.form_submit_button("Next →  Step 2",use_container_width=True)
+        with cm: p1s=st.form_submit_button("💾  Save Criteria",use_container_width=True)
+        with cr: p1n=st.form_submit_button("Next →  Step 2",use_container_width=True,type="primary")
     if p1s or p1n:
         _save_criteria(); st.session_state["_p1_saved"]=True
         if p1n: st.session_state["current_page"]="Step 2 — Score a Partner"
@@ -1188,6 +1189,8 @@ elif page=="Import Data":
             sel = st.selectbox(f'{mtype} {m["name"]}', none_opt + csv_cols,
                 index=(csv_cols.index(auto) + 1) if auto and auto in csv_cols else 0,
                 key=f"imp_m_{m['key']}")
+            if sel == "— None —":
+                st.markdown('<div style="height:3px;background:#DC2626;border-radius:2px;margin:-8px 0 6px;"></div>', unsafe_allow_html=True)
         if sel != "— None —":
             metric_mapping[m["key"]] = sel
 
@@ -1885,7 +1888,12 @@ elif page=="Admin — All Clients":
     for t in tenants:
         td=tenant_data[t]; ci=td["client_info"]; ps=td["partners"]
         client_name=ci.get("client_name",t)
-        with st.expander(f"🏢 **{client_name}** ({t}) — {len(ps)} partners {'✅' if td['has_criteria'] else '⚪'}"):
+        is_active = (t == active_tenant)
+        active_tag = ' <span style="background:#1E293B;color:#fff;font-size:.72rem;font-weight:700;padding:2px 10px;border-radius:12px;margin-left:8px;vertical-align:middle;">ACTIVE</span>' if is_active else ""
+        label_style = "color:#000;font-weight:800" if is_active else ""
+        with st.expander(f"🏢 **{client_name}** ({t}) — {len(ps)} partners {'✅' if td['has_criteria'] else '⚪'}", expanded=is_active):
+            if is_active:
+                st.markdown(f'<div style="font-size:.88rem;{label_style};margin-bottom:8px;">Currently active client{active_tag}</div>', unsafe_allow_html=True)
             if ci:
                 c1,c2,c3=st.columns(3)
                 with c1: st.markdown(f"**Contact:** {ci.get('project_manager','—')}")
