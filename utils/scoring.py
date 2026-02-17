@@ -2,12 +2,15 @@
 Scoring engine, metrics definitions, and classification for ChannelPRO™.
 
 Contains the 29 scorecard metrics, score calculation, re-scoring,
-partner classification (quadrant engine), and break-even section defs.
+partner classification (quadrant engine), break-even section defs,
+and dynamic benchmark calculation via quintile analysis.
 """
 import csv
 import json
+import math
 import re
 
+import pandas as pd
 import streamlit as st
 
 from utils.paths import csv_path, raw_path, save_path
@@ -333,6 +336,165 @@ def rescore_all() -> None:
             row["percentage"] = round(total / mp * 100, 1) if mp else 0
             w.writerow(row)
     invalidate_partner_cache()
+
+
+# ── Dynamic benchmark calculation (quintile-based) ────────────────────
+
+
+def calculate_dynamic_ranges(
+    df: pd.DataFrame,
+    criteria: dict | None = None,
+) -> dict:
+    """Compute quintile-based 1–5 scoring ranges from partner data.
+
+    For each **quantitative** metric that is enabled in *criteria*:
+    - Extract the raw values from *df* (columns named ``raw_<key>``).
+    - Drop nulls / non-numeric values.
+    - If all remaining values are identical (zero variance), assign score 3
+      to that exact value and spread ±1 around it.
+    - Otherwise use ``pandas.qcut`` with 5 equal-frequency bins.
+    - Respect ``direction``: *higher_is_better* → ascending bins 1→5;
+      *lower_is_better* → reversed bins 5→1.
+
+    Qualitative metrics are left unchanged.
+
+    Returns a **new** criteria dict (same shape as the persisted
+    ``scoring_criteria.json``) with updated ``ranges`` for quantitative
+    metrics.
+    """
+    cr = {k: dict(v) for k, v in (criteria or st.session_state.get("criteria", {})).items()}
+    if not cr:
+        return cr
+
+    em = enabled(cr)
+    for m in em:
+        mk = m["key"]
+        if m["type"] != "quantitative":
+            continue
+        mc = cr.get(mk)
+        if not mc:
+            continue
+
+        col = f"raw_{mk}"
+        if col not in df.columns:
+            continue
+
+        # Extract numeric values, dropping NaN / non-parseable
+        raw = df[col].apply(_sf)
+        vals = raw.dropna()
+        if vals.empty:
+            continue
+
+        unique = vals.nunique()
+        is_lower = m["direction"] == "lower_is_better"
+
+        if unique == 1:
+            # Zero-variance edge case — all partners share the same value.
+            # Build 6 boundaries (5 bins) centred on the single value.
+            v = vals.iloc[0]
+            spread = max(abs(v) * 0.1, 1)  # ±10% or ±1
+            boundaries = [
+                v - 2 * spread,
+                v - spread,
+                v - spread / 2,
+                v + spread / 2,
+                v + spread,
+                v + 2 * spread,
+            ]
+        else:
+            # Use qcut to find quintile boundaries.
+            # duplicates="drop" handles repeated values on bin edges.
+            try:
+                _, bin_edges = pd.qcut(vals, 5, retbins=True, duplicates="drop")
+            except ValueError:
+                continue
+
+            edges = list(bin_edges)
+            # qcut may return fewer than 6 edges when many duplicates exist.
+            # Pad to ensure we always have 6 boundaries (5 bins).
+            while len(edges) < 6:
+                edges.append(edges[-1])
+            boundaries = edges  # [min, q20, q40, q60, q80, max]
+
+        # Build the five score-range dicts.
+        # For higher_is_better: score 1 = lowest quintile → score 5 = highest
+        # For lower_is_better:  score 1 = highest quintile → score 5 = lowest
+        ranges: dict[str, dict[str, str]] = {}
+        for score_idx in range(5):  # 0..4 → scores 1..5
+            lo = boundaries[score_idx]
+            hi = boundaries[score_idx + 1]
+            lo_r = math.floor(lo * 100) / 100  # round down
+            hi_r = math.ceil(hi * 100) / 100   # round up
+
+            if is_lower:
+                # Reverse: bin 0 (lowest values) = score 5
+                score_label = str(5 - score_idx)
+            else:
+                score_label = str(score_idx + 1)
+
+            # First bin has no lower bound cap; last bin has no upper cap
+            if score_idx == 0:
+                ranges[score_label] = {"min": "", "max": _fmt(hi_r, m)}
+            elif score_idx == 4:
+                ranges[score_label] = {"min": _fmt(lo_r, m), "max": ""}
+            else:
+                ranges[score_label] = {"min": _fmt(lo_r, m), "max": _fmt(hi_r, m)}
+
+        mc["ranges"] = ranges
+        cr[mk] = mc
+
+    return cr
+
+
+def _fmt(val: float, metric: dict) -> str:
+    """Format a boundary value for storage — integers where appropriate."""
+    if val == int(val):
+        return str(int(val))
+    if metric.get("unit") in ("$", "count", "certs", "days"):
+        return str(int(round(val)))
+    return str(round(val, 2))
+
+
+def recalculate_benchmarks() -> dict:
+    """Load the active tenant's raw partner data, compute dynamic quintile
+    ranges for all quantitative metrics, persist the updated criteria, and
+    re-score every partner.
+
+    Returns a summary dict ``{"updated": [list of metric names], "skipped": [...]}``.
+    """
+    from utils.data import load_raw
+
+    raw_list = load_raw()
+    if not raw_list:
+        return {"updated": [], "skipped": ["No partner data found"]}
+
+    df = pd.DataFrame(raw_list)
+    cr = st.session_state.get("criteria")
+    if not cr:
+        return {"updated": [], "skipped": ["No scoring criteria loaded"]}
+
+    new_cr = calculate_dynamic_ranges(df, cr)
+
+    # Identify which metrics actually changed
+    updated_names: list[str] = []
+    skipped_names: list[str] = []
+    for m in SCORECARD_METRICS:
+        mk = m["key"]
+        if m["type"] != "quantitative":
+            continue
+        old_ranges = cr.get(mk, {}).get("ranges")
+        new_ranges = new_cr.get(mk, {}).get("ranges")
+        if old_ranges and new_ranges and old_ranges != new_ranges:
+            updated_names.append(m["name"])
+        elif not new_ranges or old_ranges == new_ranges:
+            skipped_names.append(m["name"])
+
+    # Persist
+    st.session_state["criteria"] = new_cr
+    save_path().write_text(json.dumps(new_cr, indent=2))
+    rescore_all()
+
+    return {"updated": updated_names, "skipped": skipped_names}
 
 
 # ── Classification engine (quadrants) ──────────────────────────────────
