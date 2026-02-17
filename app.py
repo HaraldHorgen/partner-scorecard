@@ -813,27 +813,23 @@ if st.session_state["auth_user"] is None:
     st.markdown(f"""<style>
     [data-testid="stAppViewContainer"]{{background:url('data:image/jpeg;base64,{LOGIN_BG_B64}') center center/cover no-repeat fixed !important}}
     [data-testid="stAppViewContainer"]::before{{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,18,36,0.45);z-index:0;pointer-events:none}}
+    [data-testid="stMainBlockContainer"]{{max-width:400px !important;margin:0 auto !important;padding-top:4vh !important}}
+    [data-testid="stForm"]{{background:rgba(255,255,255,0.95);border-radius:0 0 16px 16px;padding:28px 32px 32px 32px;box-shadow:0 4px 24px rgba(0,0,0,.25);backdrop-filter:blur(10px);border:none}}
+    [data-testid="stForm"] [data-testid="stFormSubmitButton"] button{{background:#e85b5b;border-color:#e85b5b}}
+    .stCaption{{text-align:center}}
+    .stAlert{{text-align:center}}
     </style>""", unsafe_allow_html=True)
-    st.markdown("""<style>
-    .login-form-wrapper [data-testid="stForm"]{background:rgba(255,255,255,0.95);border-radius:0 0 16px 16px;padding:24px 36px 32px 36px;box-shadow:0 4px 24px rgba(0,0,0,.25);backdrop-filter:blur(10px);border:none}
-    .login-form-wrapper .stCaption{text-align:center}
-    </style>""", unsafe_allow_html=True)
-    st.markdown(f"""<div style="max-width:380px;margin:0 auto;background:rgba(255,255,255,0.95);border-radius:16px 16px 0 0;padding:36px 36px 8px 36px;box-shadow:0 -4px 24px rgba(0,0,0,.15);backdrop-filter:blur(10px)">
+    st.markdown(f"""<div style="background:rgba(255,255,255,0.95);border-radius:16px 16px 0 0;padding:36px 32px 8px 32px;box-shadow:0 -4px 24px rgba(0,0,0,.15);backdrop-filter:blur(10px)">
         <div style="text-align:center;margin-bottom:8px;">
             <img src="data:image/jpeg;base64,{YORK_LOGO_B64}" style="height:50px;border-radius:6px;margin-bottom:12px;"><br>
             <span style="font-size:1.4rem;font-weight:800;color:#1e2a3a;">ChannelPRO\u2122</span><br>
             <span style="font-size:.88rem;color:#4a6a8f;">Partner Revenue Optimizer</span>
         </div></div>""", unsafe_allow_html=True)
     users = _load_users()
-    _log_spacer_l, _log_center, _log_spacer_r = st.columns([1.2, 2, 1.2])
-    with _log_center:
-        _login_wrap = st.container()
-        _login_wrap.markdown('<div class="login-form-wrapper">', unsafe_allow_html=True)
-        with _login_wrap.form("login_form"):
-            uname = st.text_input("Username", placeholder="Enter your username")
-            pw = st.text_input("Password", type="password", placeholder="Enter your password")
-            submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
-        _login_wrap.markdown('</div>', unsafe_allow_html=True)
+    with st.form("login_form"):
+        uname = st.text_input("Username", placeholder="Enter your username")
+        pw = st.text_input("Password", type="password", placeholder="Enter your password")
+        submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
     if submitted:
         if uname in users and _verify_pw(pw, users[uname]["password_hash"]):
             st.session_state["auth_user"] = uname
