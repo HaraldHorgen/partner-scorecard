@@ -27,19 +27,6 @@ Version 4 — Multi-Tenant
 
 ## 1. Getting Started
 
-### Logging In
-
-Open the ChannelPRO™ URL in your browser. You will see the login screen with the York Group logo.
-
-| Field    | Default Value   |
-|----------|-----------------|
-| Username | `admin`         |
-| Password | `admin`         |
-
-> **Important:** Change the default admin password immediately after your first login via **Admin — Manage Users**.
-
-After signing in you will see the sidebar with navigation tabs on the left and the main content area on the right.
-
 ### User Roles
 
 | Role   | Access                                                                 |
