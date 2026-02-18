@@ -86,10 +86,13 @@ section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
 .partner-hdr{background:linear-gradient(135deg,#8b9bb8,#a5b3c9);color:#fff;padding:10px 18px;border-radius:10px 10px 0 0;font-weight:700;font-size:1rem}
 .live-score{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;font-size:1.2rem;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace}
 .hint-row{font-size:.78rem;color:#7a8a9e;font-family:'JetBrains Mono',monospace;margin:6px 0 10px;line-height:1.6}
-[data-testid="stAppViewContainer"] input[type="text"],[data-testid="stAppViewContainer"] textarea{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important}
-[data-testid="stAppViewContainer"] input[type="text"]:focus,[data-testid="stAppViewContainer"] textarea:focus{background:#fff!important;border-color:#2563eb!important}
-[data-testid="stAppViewContainer"] [data-baseweb="select"] > div{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important}
-[data-testid="stAppViewContainer"] [data-baseweb="select"] > div:focus-within{background:#fff!important;border-color:#2563eb!important}
+[data-testid="stAppViewContainer"] input[type="text"],[data-testid="stAppViewContainer"] input[type="number"],[data-testid="stAppViewContainer"] textarea{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important;color:#1e2a3a!important}
+[data-testid="stAppViewContainer"] input[type="text"]:focus,[data-testid="stAppViewContainer"] input[type="number"]:focus,[data-testid="stAppViewContainer"] textarea:focus{background:#fff!important;border-color:#2563eb!important;color:#1e2a3a!important}
+[data-testid="stAppViewContainer"] [data-baseweb="select"] > div{background:#e8ebf1!important;border:1.5px solid #b0bdd0!important;color:#1e2a3a!important}
+[data-testid="stAppViewContainer"] [data-baseweb="select"] > div:focus-within{background:#fff!important;border-color:#2563eb!important;color:#1e2a3a!important}
+[data-testid="stAppViewContainer"] [data-baseweb="select"] span,[data-testid="stAppViewContainer"] [data-baseweb="select"] input{color:#1e2a3a!important}
+[data-testid="stAppViewContainer"] [data-baseweb="tag"]{color:#1e2a3a!important}
+[data-testid="stAppViewContainer"] .stSelectbox div[data-baseweb="select"] div,[data-testid="stAppViewContainer"] .stMultiSelect div[data-baseweb="select"] div{color:#1e2a3a!important}
 .hm-tbl{width:100%;border-collapse:collapse;font-size:.82rem;background:#fff;margin:1rem 0}
 .hm-tbl th{background:#1e2a3a;color:#fff;padding:8px 6px;text-align:center;font-weight:700;font-size:.72rem;text-transform:uppercase;white-space:nowrap;border:1px solid #2a3d57}
 .hm-tbl th.hm-diag{white-space:nowrap;vertical-align:bottom;height:160px;padding:0;width:40px;min-width:40px;text-align:left}
