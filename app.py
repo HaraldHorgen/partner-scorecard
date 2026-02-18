@@ -339,7 +339,7 @@ if "current_page" not in st.session_state:
 # ═════════════════════════════════════════════════════════════════════════
 # SIDEBAR (with clickable partner list + PAM filter)
 # ═════════════════════════════════════════════════════════════════════════
-CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery"]
+CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery","User Guide"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
 with st.sidebar:
@@ -2534,3 +2534,15 @@ elif page == "Revenue Recovery":
         mime="text/csv",
         use_container_width=False,
     )
+
+# ═════════════════════════════════════════════════════════════════════════
+# USER GUIDE
+# ═════════════════════════════════════════════════════════════════════════
+elif page == "User Guide":
+    _brand()
+    from pathlib import Path
+    _guide_path = Path(__file__).parent / "USER_GUIDE.md"
+    if _guide_path.exists():
+        st.markdown(_guide_path.read_text(), unsafe_allow_html=False)
+    else:
+        st.warning("User guide file not found.")
