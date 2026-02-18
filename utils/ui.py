@@ -60,7 +60,8 @@ def inject_css() -> None:
         """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;800&display=swap');
-[data-testid="stAppViewContainer"]{background:#f3f5f9;font-family:'DM Sans',sans-serif}
+[data-testid="stAppViewContainer"]{background:#f3f5f9;font-family:'DM Sans',sans-serif;color:#1e2a3a}
+[data-testid="stAppViewContainer"] label,[data-testid="stAppViewContainer"] .stRadio label,[data-testid="stAppViewContainer"] .stCheckbox label,[data-testid="stAppViewContainer"] .stMultiSelect label,[data-testid="stAppViewContainer"] [data-testid="stWidgetLabel"]{color:#1e2a3a!important}
 section[data-testid="stSidebar"]{background:linear-gradient(195deg,#162033,#1e2d45)}
 section[data-testid="stSidebar"] *{color:#c4cfde!important}
 section[data-testid="stSidebar"] hr{border-color:#2a3d57!important}
