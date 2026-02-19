@@ -204,6 +204,12 @@ def init_criteria() -> None:
                 changed = True
         if changed:
             st.session_state["criteria"] = cr
+        # Ensure criteria file exists on disk (covers sessions that
+        # initialised before the file-write logic was added).
+        sp = save_path()
+        if not sp.exists():
+            sp.parent.mkdir(parents=True, exist_ok=True)
+            sp.write_text(json.dumps(cr, indent=2))
         return
 
     sp = save_path()

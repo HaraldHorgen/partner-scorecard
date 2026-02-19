@@ -668,9 +668,8 @@ elif page=="Step 1 — Scoring Criteria":
 elif page=="Step 2 — Score a Partner":
     _brand()
     st.markdown("## Step 2 — Score a Partner")
-    if not _save_path().exists():
+    if "criteria" not in st.session_state or not st.session_state["criteria"]:
         st.warning("⚠️ Complete **Step 1** first."); st.stop()
-    st.session_state["criteria"]=json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr=st.session_state["criteria"]; em=_enabled(); mx=len(em)*5
     # Form version counter — incremented on submit to clear all fields
@@ -1155,9 +1154,8 @@ elif page=="Step 4 — Partner Classification":
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Import Data":
     _brand(); st.markdown("## Import Partner Data from CSV")
-    if not _save_path().exists():
+    if "criteria" not in st.session_state or not st.session_state["criteria"]:
         st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first so metrics are available for mapping."); st.stop()
-    st.session_state["criteria"] = json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr = st.session_state["criteria"]; em = _enabled()
 
@@ -1445,9 +1443,8 @@ elif page=="Import Data":
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Partner List":
     _brand(); st.markdown("## Partner List")
-    if not _save_path().exists():
+    if "criteria" not in st.session_state or not st.session_state["criteria"]:
         st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first."); st.stop()
-    st.session_state["criteria"] = json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr = st.session_state["criteria"]; em = _enabled()
     partners = _load_partners()
@@ -1701,9 +1698,8 @@ elif page=="Partner List":
 # ═════════════════════════════════════════════════════════════════════════
 elif page=="Ask ChannelPRO™":
     _brand(); st.markdown("## 🤖 Ask ChannelPRO™")
-    if not _save_path().exists():
+    if "criteria" not in st.session_state or not st.session_state["criteria"]:
         st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first."); st.stop()
-    st.session_state["criteria"] = json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr = st.session_state["criteria"]
     partners = _load_partners()
