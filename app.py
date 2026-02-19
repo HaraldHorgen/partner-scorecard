@@ -1912,6 +1912,38 @@ elif page=="Admin — Manage Users":
     else:
         st.info("No tenant directories yet. Add a client user above to create one.")
 
+    # ── Promote Demo → Client ─────────────────────────────────────────
+    demo_tenants = [t for t in _all_tenants() if t.lower().startswith("demo-")]
+    if demo_tenants:
+        st.markdown("---")
+        st.markdown("### Promote Demo to Client")
+        st.caption("Rename a `demo-` tenant folder to `client-` and update all user records. "
+                   "This preserves all data and converts the tenant to full client access.")
+        promo_sel = st.selectbox("Select demo tenant", demo_tenants, key="adm_promo_sel")
+        if promo_sel:
+            new_tid = "client-" + promo_sel[len("demo-"):]
+            st.markdown(f"**{promo_sel}** → **{new_tid}**")
+            if new_tid in _all_tenants():
+                st.error(f"Target tenant `{new_tid}` already exists. Rename or remove it first.")
+            elif st.button(f"🚀 Promote to Client", key="adm_promo_btn", type="primary"):
+                import shutil
+                src = TENANTS_DIR / promo_sel
+                dst = TENANTS_DIR / new_tid
+                os.rename(str(src), str(dst))
+                # Update every user whose tenant matches the old ID
+                promo_users = _load_users()
+                updated_count = 0
+                for _uname, _udata in promo_users.items():
+                    if (_udata.get("tenant") or "").lower() == promo_sel.lower():
+                        _udata["tenant"] = new_tid
+                        updated_count += 1
+                _save_users(promo_users)
+                # Switch active tenant if we just renamed the one in use
+                if st.session_state.get("active_tenant", "").lower() == promo_sel.lower():
+                    st.session_state["active_tenant"] = new_tid
+                st.session_state["_admin_saved"] = True
+                st.rerun()
+
 # ═════════════════════════════════════════════════════════════════════════
 # ADMIN — ALL CLIENTS OVERVIEW
 # ═════════════════════════════════════════════════════════════════════════
