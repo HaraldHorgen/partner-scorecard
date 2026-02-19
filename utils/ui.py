@@ -13,6 +13,7 @@ __all__ = [
     "YORK_LOGO_B64", "LOGIN_BG_B64", "inject_css", "logo", "brand",
     "display_styled_assessment_table",
     "display_classification_dashboard",
+    "get_tenant_tier", "show_premium_placeholder",
 ]
 
 
@@ -159,6 +160,48 @@ def brand() -> None:
                 pass
     else:
         st.markdown(brand_html, unsafe_allow_html=True)
+
+
+# ── Tenant tier detection ─────────────────────────────────────────────
+
+def get_tenant_tier(tenant_id: str | None = None) -> str:
+    """Return the access tier for a tenant based on its ID prefix.
+
+    Returns one of ``"admin"``, ``"client"``, or ``"demo"``.
+    """
+    if tenant_id is None:
+        tenant_id = st.session_state.get("active_tenant") or ""
+    if st.session_state.get("auth_role") == "admin":
+        return "admin"
+    tid = (tenant_id or "").lower()
+    if tid.startswith("demo-"):
+        return "demo"
+    return "client"
+
+
+def show_premium_placeholder(feature_name: str) -> None:
+    """Render a professional locked-module placeholder and halt."""
+    st.markdown(
+        f"""
+        <div style="background-color: #f0f2f6; padding: 40px; border-radius: 15px;
+                    border-left: 5px solid #00d4ff; text-align: center;">
+            <h2 style="color: #0e1117;">\U0001f512 {feature_name} is a Premium Module</h2>
+            <p style="font-size: 1.1em; color: #31333F;">
+                This advanced strategic module is reserved for full <b>ChannelPRO\u2122</b> engagements.
+                Unlock high-resolution partner classification and automated realignment roadmaps.
+            </p>
+            <div style="margin-top: 25px;">
+                <a href="mailto:hhorgen@theyorkgroup.com?subject=Unlocking {feature_name}"
+                   style="background-color: #00d4ff; color: white; padding: 12px 25px;
+                          text-decoration: none; border-radius: 8px; font-weight: bold;">
+                    Contact The York Group to Unlock
+                </a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
 
 
 # ── Professional AG Grid assessment table ─────────────────────────────

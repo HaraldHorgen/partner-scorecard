@@ -6,11 +6,19 @@ persistence via a JSON file on the tenant-aware persistent disk.
 """
 import hashlib
 import json
+import logging
+import os
 import secrets
+import smtplib
+import threading
+from datetime import datetime, timezone
+from email.message import EmailMessage
 
 import streamlit as st
 
 from utils.paths import USERS_FILE
+
+_log = logging.getLogger(__name__)
 
 
 # ── Password helpers ────────────────────────────────────────────────────
@@ -121,6 +129,10 @@ def handle_login() -> bool:
                 st.session_state["active_tenant"] = tenants[0] if tenants else None
             else:
                 st.session_state["active_tenant"] = u["tenant"]
+                # Fire email alert for demo-tenant logins
+                tenant_id = u.get("tenant") or ""
+                if tenant_id.lower().startswith("demo-"):
+                    _send_demo_login_alert(tenant_id)
             st.rerun()
         else:
             st.error("Invalid username or password.")
@@ -128,3 +140,45 @@ def handle_login() -> bool:
     st.caption("Default admin login: **admin** / **admin** — change this after first login!")
     st.stop()
     return False  # unreachable, but explicit for type checkers
+
+
+# ── Demo-tenant login notification ────────────────────────────────────
+
+def _send_demo_login_alert(tenant_id: str) -> None:
+    """Send an email alert when a demo-tenant user logs in.
+
+    Requires ``SMTP_HOST``, ``SMTP_PORT``, ``SMTP_USER``, and
+    ``SMTP_PASSWORD`` environment variables.  Runs in a background
+    thread so the login flow is never blocked.
+    """
+    host = os.environ.get("SMTP_HOST", "")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    user = os.environ.get("SMTP_USER", "")
+    password = os.environ.get("SMTP_PASSWORD", "")
+    if not (host and user and password):
+        _log.warning("SMTP not configured — skipping demo-login alert for %s", tenant_id)
+        return
+
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    msg = EmailMessage()
+    msg["Subject"] = f"ChannelPRO™ Demo Login — {tenant_id}"
+    msg["From"] = user
+    msg["To"] = "hhorgen@theyorkgroup.com"
+    msg.set_content(
+        f"A demo-tenant user has logged in.\n\n"
+        f"  Tenant ID : {tenant_id}\n"
+        f"  Timestamp : {ts}\n"
+    )
+
+    def _send():
+        try:
+            with smtplib.SMTP(host, port, timeout=15) as srv:
+                srv.ehlo()
+                srv.starttls()
+                srv.login(user, password)
+                srv.send_message(msg)
+            _log.info("Demo-login alert sent for %s", tenant_id)
+        except Exception:
+            _log.exception("Failed to send demo-login alert for %s", tenant_id)
+
+    threading.Thread(target=_send, daemon=True).start()
