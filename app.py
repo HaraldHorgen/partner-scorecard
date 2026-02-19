@@ -80,6 +80,8 @@ from utils.ui import (
     logo as _logo,
     brand as _brand,
     display_styled_assessment_table,
+    get_tenant_tier as _get_tenant_tier,
+    show_premium_placeholder as _show_premium_placeholder,
 )
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -342,6 +344,15 @@ if "current_page" not in st.session_state:
 CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery","User Guide"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
+# Pages locked for demo-prefix tenants (shown in sidebar but gated on click).
+DEMO_LOCKED_PAGES = {
+    "Step 2 — Score a Partner",
+    "Step 3 — Partner Assessment",
+    "Step 4 — Partner Classification",
+}
+
+_tenant_tier = _get_tenant_tier()
+
 with st.sidebar:
     _logo()
     st.markdown("**ChannelPRO™** — Partner Revenue Optimizer")
@@ -370,15 +381,31 @@ with st.sidebar:
             st.info("No clients yet. Create one in Manage Users.")
         st.markdown("---")
 
-    pages = ADMIN_PAGES if is_admin else CLIENT_PAGES
+    if is_admin:
+        pages = ADMIN_PAGES
+    elif _tenant_tier == "demo":
+        # Swap "User Guide" → "Quick-Start Guide" for demo tenants
+        pages = [("Quick-Start Guide" if p == "User Guide" else p) for p in CLIENT_PAGES]
+    else:
+        pages = list(CLIENT_PAGES)
+
+    # ── Fix "two-click" bug: use on_change callback so state updates
+    #    before the next render cycle instead of fighting the index param.
+    def _on_nav_change():
+        st.session_state["current_page"] = st.session_state["nav_radio"]
+
+    cur = st.session_state["current_page"]
+    if cur not in pages:
+        st.session_state["current_page"] = pages[0]
+        cur = pages[0]
     page = st.radio("Navigate", pages,
-        index=pages.index(st.session_state["current_page"]) if st.session_state["current_page"] in pages else 0,
-        key="nav_radio", label_visibility="collapsed")
-    st.session_state["current_page"] = page
+        index=pages.index(cur),
+        key="nav_radio", on_change=_on_nav_change, label_visibility="collapsed")
+    page = st.session_state["current_page"]
     st.markdown("---")
 
     chosen_cat = "All Metrics"
-    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery","Admin — Manage Users","Admin — All Clients"):
+    if page not in ("Client Intake","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery","Admin — Manage Users","Admin — All Clients","User Guide","Quick-Start Guide"):
         cat_labels=["All Metrics"]+[f"{c['icon']}  {c['label']}" for c in CATEGORIES]
         chosen_cat=st.radio("Category",cat_labels,index=0,label_visibility="collapsed")
     st.markdown("---")
@@ -450,6 +477,39 @@ if not active_tenant and page not in ("Admin — Manage Users","Admin — All Cl
     _brand()
     st.warning("No client selected. Use **Admin → Manage Users** to create a client account first.")
     st.stop()
+
+# ── RBAC: demo-tenant "Tease" gate ──────────────────────────────────
+if _tenant_tier == "demo" and page in DEMO_LOCKED_PAGES:
+    _brand()
+    _show_premium_placeholder(page)
+
+# ── Trial expiry gate for demo tenants ───────────────────────────────
+if _tenant_tier == "demo" and active_tenant:
+    import datetime
+    _t_dir = _tenant_dir(active_tenant)
+    _t_created = datetime.datetime.fromtimestamp(_t_dir.stat().st_ctime)
+    _t_age_days = (datetime.datetime.now() - _t_created).days
+    if _t_age_days >= 15:
+        _brand()
+        st.markdown(
+            '<div style="background-color:#f0f2f6;padding:40px;border-radius:15px;'
+            'border-left:5px solid #dc4040;text-align:center;">'
+            '<h2 style="color:#0e1117;">\u23f0 Trial Period Expired</h2>'
+            '<p style="font-size:1.1em;color:#31333F;">'
+            'Your 14-day ChannelPRO\u2122 assessment period has ended.<br>'
+            'Contact your <b>York Group</b> consultant to continue with a full engagement.</p>'
+            '<div style="margin-top:25px;">'
+            '<a href="mailto:hhorgen@theyorkgroup.com?subject=ChannelPRO Trial Expired"'
+            ' style="background-color:#00d4ff;color:white;padding:12px 25px;'
+            'text-decoration:none;border-radius:8px;font-weight:bold;">'
+            'Contact The York Group</a></div></div>',
+            unsafe_allow_html=True,
+        )
+        st.stop()
+    elif _t_age_days >= 11:
+        _remaining = 14 - _t_age_days
+        st.warning(f"\u26a0\ufe0f **Trial Alert:** You have **{_remaining}** day{'s' if _remaining != 1 else ''} "
+                   f"remaining in your assessment period.")
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -679,7 +739,7 @@ elif page=="Step 2 — Score a Partner":
                 if lo and hi: hints.append(f"<b>{s}</b>: {lo}–{hi}")
                 elif lo and not hi: hints.append(f"<b>{s}</b>: ≥{lo}")
                 elif not lo and hi: hints.append(f"<b>{s}</b>: ≤{hi}")
-            if hints: st.markdown(f'<div class="hint-row">Ranges ({u}): {" &nbsp;·&nbsp; ".join(hints)}</div>',unsafe_allow_html=True)
+            if hints and is_admin: st.markdown(f'<div class="hint-row">Ranges ({u}): {" &nbsp;·&nbsp; ".join(hints)}</div>',unsafe_allow_html=True)
             ic,sc_c=st.columns([4,1])
             with ic: pv=st.text_input(f"Value ({u})",key=f"p2_{mk}_{fv}",placeholder=f"Enter number ({u})",label_visibility="collapsed",value=str(view_val) if view_val else "")
             scr=calc_score(mk,pv)
@@ -1394,6 +1454,9 @@ elif page=="Partner List":
 
     # ── Edit mode (single partner) ──
     edit_pn = st.session_state.get("_pl_edit")
+    if edit_pn and _tenant_tier == "demo":
+        st.session_state.pop("_pl_edit", None)
+        _show_premium_placeholder("Edit Scorecard")
     if edit_pn:
         raw_all = _load_raw()
         raw_p = next((r for r in raw_all if r.get("partner_name") == edit_pn), None)
@@ -1464,7 +1527,7 @@ elif page=="Partner List":
                             pv = st.text_input(f"{m['name']} ({u})" if u else m["name"],
                                 value=str(raw_val) if raw_val else "",
                                 key=f"ple_v_{mk}",
-                                help=f"{m['explanation']}  •  Ranges: {', '.join(hints)}" if hints else m["explanation"])
+                                help=(f"{m['explanation']}  •  Ranges: {', '.join(hints)}" if hints else m["explanation"]) if is_admin else m["explanation"])
                         scr = calc_score(mk, pv, cr) if pv else None
                         with sc_c:
                             if scr:
@@ -1576,7 +1639,10 @@ elif page=="Partner List":
             sel_partner = st.selectbox("Select partner", partner_names, key="pl_sel_partner")
             ec1, ec2 = st.columns(2)
             with ec1:
-                if st.button("✏️  Edit Scorecard", use_container_width=True, type="primary", key="pl_edit_btn"):
+                if _tenant_tier == "demo":
+                    st.button("✏️  Edit Scorecard", use_container_width=True, type="primary", key="pl_edit_btn", disabled=True,
+                              help="Editing is reserved for full ChannelPRO™ engagements.")
+                elif st.button("✏️  Edit Scorecard", use_container_width=True, type="primary", key="pl_edit_btn"):
                     st.session_state["_pl_edit"] = sel_partner; st.rerun()
             with ec2:
                 if st.button("🗑️  Delete Partner", use_container_width=True, key="pl_del_btn"):
@@ -1845,6 +1911,38 @@ elif page=="Admin — Manage Users":
                     st.session_state["_admin_saved"] = True; st.rerun()
     else:
         st.info("No tenant directories yet. Add a client user above to create one.")
+
+    # ── Promote Demo → Client ─────────────────────────────────────────
+    demo_tenants = [t for t in _all_tenants() if t.lower().startswith("demo-")]
+    if demo_tenants:
+        st.markdown("---")
+        st.markdown("### Promote Demo to Client")
+        st.caption("Rename a `demo-` tenant folder to `client-` and update all user records. "
+                   "This preserves all data and converts the tenant to full client access.")
+        promo_sel = st.selectbox("Select demo tenant", demo_tenants, key="adm_promo_sel")
+        if promo_sel:
+            new_tid = "client-" + promo_sel[len("demo-"):]
+            st.markdown(f"**{promo_sel}** → **{new_tid}**")
+            if new_tid in _all_tenants():
+                st.error(f"Target tenant `{new_tid}` already exists. Rename or remove it first.")
+            elif st.button(f"🚀 Promote to Client", key="adm_promo_btn", type="primary"):
+                import shutil
+                src = TENANTS_DIR / promo_sel
+                dst = TENANTS_DIR / new_tid
+                os.rename(str(src), str(dst))
+                # Update every user whose tenant matches the old ID
+                promo_users = _load_users()
+                updated_count = 0
+                for _uname, _udata in promo_users.items():
+                    if (_udata.get("tenant") or "").lower() == promo_sel.lower():
+                        _udata["tenant"] = new_tid
+                        updated_count += 1
+                _save_users(promo_users)
+                # Switch active tenant if we just renamed the one in use
+                if st.session_state.get("active_tenant", "").lower() == promo_sel.lower():
+                    st.session_state["active_tenant"] = new_tid
+                st.session_state["_admin_saved"] = True
+                st.rerun()
 
 # ═════════════════════════════════════════════════════════════════════════
 # ADMIN — ALL CLIENTS OVERVIEW
@@ -2536,13 +2634,50 @@ elif page == "Revenue Recovery":
     )
 
 # ═════════════════════════════════════════════════════════════════════════
-# USER GUIDE
+# USER GUIDE / QUICK-START GUIDE
 # ═════════════════════════════════════════════════════════════════════════
-elif page == "User Guide":
+elif page in ("User Guide", "Quick-Start Guide"):
     _brand()
     from pathlib import Path
-    _guide_path = Path(__file__).parent / "USER_GUIDE.md"
-    if _guide_path.exists():
-        st.markdown(_guide_path.read_text(), unsafe_allow_html=False)
+    if page == "Quick-Start Guide":
+        st.markdown("## Quick-Start Guide")
+        st.markdown("""<div class="info-box">
+        Welcome to your <b>ChannelPRO™</b> demo environment. This guide covers the key steps
+        to explore the platform during your trial period.</div>""", unsafe_allow_html=True)
+        st.markdown("""
+### Recommended Workflow
+
+```
+Client Intake → Import Data → Partner List → Break-even Analysis → Revenue Recovery
+```
+
+### 1. Client Intake
+Capture your company profile — name, industry verticals, partner tiers, and target customer size.
+This personalizes the scoring experience for your organization.
+
+### 2. Import Data
+Upload a CSV of partner data from your CRM or PRM system. ChannelPRO™ auto-maps columns
+and scores partners against pre-configured benchmarks.
+
+### 3. Partner List
+View all imported partners with their total scores and grades at a glance.
+
+### 4. Break-even Analysis
+Enter your program costs to calculate the break-even cost per partner,
+then upload per-partner data for granular cost-vs-revenue analysis.
+
+### 5. Revenue Recovery
+Identify non-performing partners and calculate how much margin you could
+recapture by adjusting their discount rates.
+
+---
+
+*Scoring logic, partner classification, and scorecard editing are available
+in full ChannelPRO™ engagements. Contact your York Group consultant to unlock.*
+""")
     else:
-        st.warning("User guide file not found.")
+        _guide_path = Path(__file__).parent / "USER_GUIDE.md"
+        if _guide_path.exists():
+            st.markdown(_guide_path.read_text(), unsafe_allow_html=False)
+        else:
+            st.warning("User guide file not found.")
