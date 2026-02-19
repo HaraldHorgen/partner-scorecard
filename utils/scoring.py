@@ -232,6 +232,10 @@ def init_criteria() -> None:
                 "descriptors": {s: m["defaults"][s] for s in ("1", "2", "3", "4", "5")},
             }
     st.session_state["criteria"] = cr
+    # Persist defaults to disk so pages that gate on the file can proceed
+    sp = save_path()
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    sp.write_text(json.dumps(cr, indent=2))
 
 
 def ensure_criteria_complete() -> None:
