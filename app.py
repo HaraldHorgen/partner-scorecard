@@ -342,6 +342,10 @@ if "current_page" not in st.session_state:
 CLIENT_PAGES = ["Client Intake","Step 1 — Scoring Criteria","Step 2 — Score a Partner","Step 3 — Partner Assessment","Step 4 — Partner Classification","Import Data","Partner List","Ask ChannelPRO™","Break-even — Program Costs","Break-even — Detailed Analysis","Revenue Recovery","User Guide"]
 ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
+# Pages that require admin role — shown in sidebar for all users ("tease")
+# but render a professional placeholder when a client user clicks them.
+RESTRICTED_PAGES = {"Step 1 — Scoring Criteria", "Step 4 — Partner Classification"}
+
 with st.sidebar:
     _logo()
     st.markdown("**ChannelPRO™** — Partner Revenue Optimizer")
@@ -449,6 +453,21 @@ else:
 if not active_tenant and page not in ("Admin — Manage Users","Admin — All Clients"):
     _brand()
     st.warning("No client selected. Use **Admin → Manage Users** to create a client account first.")
+    st.stop()
+
+# ── RBAC: "Tease" gate for restricted pages ──────────────────────────
+if not is_admin and page in RESTRICTED_PAGES:
+    _brand()
+    st.markdown(
+        '<div style="background:linear-gradient(135deg,#1e2a3a,#2c3e56);border-radius:14px;'
+        'padding:40px 36px;margin:30px 0;text-align:center;color:#fff;">'
+        '<div style="font-size:2rem;margin-bottom:12px;">🔒</div>'
+        '<div style="font-size:1.25rem;font-weight:700;margin-bottom:8px;">Premium Feature</div>'
+        '<div style="font-size:.95rem;opacity:.85;line-height:1.6;max-width:520px;margin:0 auto;">'
+        'This feature is reserved for full strategic engagements.<br>'
+        'Contact your <b>York Group</b> consultant to unlock.</div></div>',
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 
@@ -679,7 +698,7 @@ elif page=="Step 2 — Score a Partner":
                 if lo and hi: hints.append(f"<b>{s}</b>: {lo}–{hi}")
                 elif lo and not hi: hints.append(f"<b>{s}</b>: ≥{lo}")
                 elif not lo and hi: hints.append(f"<b>{s}</b>: ≤{hi}")
-            if hints: st.markdown(f'<div class="hint-row">Ranges ({u}): {" &nbsp;·&nbsp; ".join(hints)}</div>',unsafe_allow_html=True)
+            if hints and is_admin: st.markdown(f'<div class="hint-row">Ranges ({u}): {" &nbsp;·&nbsp; ".join(hints)}</div>',unsafe_allow_html=True)
             ic,sc_c=st.columns([4,1])
             with ic: pv=st.text_input(f"Value ({u})",key=f"p2_{mk}_{fv}",placeholder=f"Enter number ({u})",label_visibility="collapsed",value=str(view_val) if view_val else "")
             scr=calc_score(mk,pv)
@@ -1464,7 +1483,7 @@ elif page=="Partner List":
                             pv = st.text_input(f"{m['name']} ({u})" if u else m["name"],
                                 value=str(raw_val) if raw_val else "",
                                 key=f"ple_v_{mk}",
-                                help=f"{m['explanation']}  •  Ranges: {', '.join(hints)}" if hints else m["explanation"])
+                                help=(f"{m['explanation']}  •  Ranges: {', '.join(hints)}" if hints else m["explanation"]) if is_admin else m["explanation"])
                         scr = calc_score(mk, pv, cr) if pv else None
                         with sc_c:
                             if scr:
@@ -2526,14 +2545,18 @@ elif page == "Revenue Recovery":
 
     # ── Export ──
     st.markdown("---")
-    csv_data = df.to_csv(index=False)
-    st.download_button(
-        "Download Report (CSV)",
-        csv_data,
-        file_name="revenue_recovery_report.csv",
-        mime="text/csv",
-        use_container_width=False,
-    )
+    if is_admin:
+        csv_data = df.to_csv(index=False)
+        st.download_button(
+            "Download Report (CSV)",
+            csv_data,
+            file_name="revenue_recovery_report.csv",
+            mime="text/csv",
+            use_container_width=False,
+        )
+    else:
+        st.info("🔒 Exporting is disabled in the trial environment. "
+                "Contact your York Group consultant to enable data exports.")
 
 # ═════════════════════════════════════════════════════════════════════════
 # USER GUIDE
