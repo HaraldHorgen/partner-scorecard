@@ -174,7 +174,7 @@ def get_tenant_tier(tenant_id: str | None = None) -> str:
     if st.session_state.get("auth_role") == "admin":
         return "admin"
     tid = (tenant_id or "").lower()
-    if tid.startswith("demo-"):
+    if tid.startswith(("demo-", "demo_")):
         return "demo"
     return "client"
 

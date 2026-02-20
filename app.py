@@ -1913,15 +1913,17 @@ elif page=="Admin — Manage Users":
         st.info("No tenant directories yet. Add a client user above to create one.")
 
     # ── Promote Demo → Client ─────────────────────────────────────────
-    demo_tenants = [t for t in _all_tenants() if t.lower().startswith("demo-")]
+    demo_tenants = [t for t in _all_tenants() if t.lower().startswith(("demo-", "demo_"))]
     if demo_tenants:
         st.markdown("---")
         st.markdown("### Promote Demo to Client")
-        st.caption("Rename a `demo-` tenant folder to `client-` and update all user records. "
+        st.caption("Rename a `demo-` or `demo_` tenant folder to `client-` and update all user records. "
                    "This preserves all data and converts the tenant to full client access.")
         promo_sel = st.selectbox("Select demo tenant", demo_tenants, key="adm_promo_sel")
         if promo_sel:
-            new_tid = "client-" + promo_sel[len("demo-"):]
+            # Strip the demo prefix (demo- or demo_) and replace with client-
+            _prefix_len = 5  # len("demo-") == len("demo_") == 5
+            new_tid = "client-" + promo_sel[_prefix_len:]
             st.markdown(f"**{promo_sel}** → **{new_tid}**")
             if new_tid in _all_tenants():
                 st.error(f"Target tenant `{new_tid}` already exists. Rename or remove it first.")
