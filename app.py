@@ -346,12 +346,19 @@ ADMIN_PAGES = CLIENT_PAGES + ["Admin — Manage Users","Admin — All Clients"]
 
 # Pages locked for demo-prefix tenants (shown in sidebar but gated on click).
 DEMO_LOCKED_PAGES = {
+    "Step 1 — Scoring Criteria",
     "Step 2 — Score a Partner",
     "Step 3 — Partner Assessment",
     "Step 4 — Partner Classification",
 }
 
 _tenant_tier = _get_tenant_tier()
+
+# ── Demo tenants: auto-save default criteria so Import Data / Partner List work ──
+if _tenant_tier == "demo" and active_tenant and not _save_path().exists():
+    st.session_state["criteria"] = {}
+    _ensure_criteria_complete()          # populates defaults for every metric
+    _save_path().write_text(json.dumps(st.session_state["criteria"], indent=2))
 
 with st.sidebar:
     _logo()
@@ -412,6 +419,7 @@ with st.sidebar:
 
     if active_tenant:
         if _save_path().exists(): st.success("✅ Criteria saved")
+        elif _tenant_tier == "demo": st.info("ℹ️ Import data first")
         else: st.info("ℹ️ Complete Step 1 first")
         en=_enabled()
         st.metric("Active Metrics",len(en))
@@ -589,11 +597,13 @@ if page=="Client Intake":
         desig=st.text_input("Comma-separated, e.g. gold, silver, bronze",value=ci.get("partner_designations",""),key="ci_desig")
         st.markdown("---")
         _,cr=st.columns([3,1])
-        with cr: ci_sub=st.form_submit_button("Next →  Step 1",use_container_width=True,type="primary")
+        _ci_next_label = "Next →  Import Data" if _tenant_tier == "demo" else "Next →  Step 1"
+        with cr: ci_sub=st.form_submit_button(_ci_next_label,use_container_width=True,type="primary")
     if ci_sub:
         st.session_state["client_info"]={"client_name":ci_name,"project_manager":ci_pm,"url":ci_url,"city":ci_city,"country":ci_country,"email":ci_email,"phone":ci_phone,"logo_url":ci_logo_url,"company_size":sz_sel,"verticals":v_sel,"other_verticals":other_v,"solution_delivery":d_sel,"target_company_size":tc_sel,"avg_transaction_value":txn,"services_pct":svc,"services_comments":svc_c,"partner_count":pc,"indirect_revenue_pct":ind,"discounts":disc_sel,"partner_designations":desig}
         _client_path().write_text(json.dumps(st.session_state["client_info"],indent=2))
-        st.session_state["_ci_saved"]=True; st.session_state["current_page"]="Step 1 — Scoring Criteria"; st.rerun()
+        _ci_next_page = "Import Data" if _tenant_tier == "demo" else "Step 1 — Scoring Criteria"
+        st.session_state["_ci_saved"]=True; st.session_state["current_page"]=_ci_next_page; st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -669,7 +679,13 @@ elif page=="Step 2 — Score a Partner":
     _brand()
     st.markdown("## Step 2 — Score a Partner")
     if not _save_path().exists():
-        st.warning("⚠️ Complete **Step 1** first."); st.stop()
+        if _tenant_tier == "demo":
+            st.warning("⚠️ Import data first.")
+            if st.button("📥 Go to Import Data", type="primary"):
+                st.session_state["current_page"] = "Import Data"; st.rerun()
+        else:
+            st.warning("⚠️ Complete **Step 1** first.")
+        st.stop()
     st.session_state["criteria"]=json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr=st.session_state["criteria"]; em=_enabled(); mx=len(em)*5
@@ -1156,7 +1172,11 @@ elif page=="Step 4 — Partner Classification":
 elif page=="Import Data":
     _brand(); st.markdown("## Import Partner Data from CSV")
     if not _save_path().exists():
-        st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first so metrics are available for mapping."); st.stop()
+        if _tenant_tier == "demo":
+            st.warning("⚠️ Import data first.")
+        else:
+            st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first so metrics are available for mapping.")
+        st.stop()
     st.session_state["criteria"] = json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr = st.session_state["criteria"]; em = _enabled()
@@ -1446,7 +1466,13 @@ elif page=="Import Data":
 elif page=="Partner List":
     _brand(); st.markdown("## Partner List")
     if not _save_path().exists():
-        st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first."); st.stop()
+        if _tenant_tier == "demo":
+            st.warning("⚠️ Import data first.")
+            if st.button("📥 Go to Import Data", type="primary"):
+                st.session_state["current_page"] = "Import Data"; st.rerun()
+        else:
+            st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first.")
+        st.stop()
     st.session_state["criteria"] = json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr = st.session_state["criteria"]; em = _enabled()
@@ -1702,7 +1728,13 @@ elif page=="Partner List":
 elif page=="Ask ChannelPRO™":
     _brand(); st.markdown("## 🤖 Ask ChannelPRO™")
     if not _save_path().exists():
-        st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first."); st.stop()
+        if _tenant_tier == "demo":
+            st.warning("⚠️ Import data first.")
+            if st.button("📥 Go to Import Data", type="primary"):
+                st.session_state["current_page"] = "Import Data"; st.rerun()
+        else:
+            st.warning("⚠️ Complete **Step 1 — Scoring Criteria** first.")
+        st.stop()
     st.session_state["criteria"] = json.loads(_save_path().read_text())
     _ensure_criteria_complete()
     cr = st.session_state["criteria"]
@@ -2658,7 +2690,8 @@ This personalizes the scoring experience for your organization.
 
 ### 2. Import Data
 Upload a CSV of partner data from your CRM or PRM system. ChannelPRO™ auto-maps columns
-and scores partners against pre-configured benchmarks.
+and scores partners against pre-configured benchmarks. Scoring criteria are pre-configured
+with sensible defaults — just import your data and review the results.
 
 ### 3. Partner List
 View all imported partners with their total scores and grades at a glance.
@@ -2673,9 +2706,11 @@ recapture by adjusting their discount rates.
 
 ---
 
-*Scoring logic, partner classification, and scorecard editing are available
+*Scoring criteria customization, partner classification, and scorecard editing are available
 in full ChannelPRO™ engagements. Contact your York Group consultant to unlock.*
 """)
+        if st.button("📥 Go to Import Data", type="primary"):
+            st.session_state["current_page"] = "Import Data"; st.rerun()
     else:
         _guide_path = Path(__file__).parent / "USER_GUIDE.md"
         if _guide_path.exists():
