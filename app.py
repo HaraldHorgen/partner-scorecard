@@ -1191,6 +1191,20 @@ elif page=="Import Data":
         res = st.session_state.pop("_import_done")
         st.markdown(f'<div class="toast">✅ Import complete — {res["created"]} created, {res["updated"]} updated, {res["errors"]} errors</div>', unsafe_allow_html=True)
 
+    # Partner-limit banner
+    _imp_limit = _max_partners()
+    if _imp_limit:
+        _imp_count = _partner_count()
+        _imp_remaining = max(0, _imp_limit - _imp_count)
+        if _imp_remaining == 0:
+            st.warning(
+                f"⚠️ You've reached your partner limit of **{_imp_limit}**. "
+                "Importing will only update existing partners — no new partners can be added. "
+                "Contact your York Group consultant to upgrade your plan."
+            )
+        else:
+            st.info(f"📊 Partner usage: **{_imp_count}** / **{_imp_limit}** — you can import up to **{_imp_remaining}** new partner(s).")
+
     uploaded = st.file_uploader("📁 Upload CSV file", type=["csv"], key="import_csv")
     if uploaded is None:
         st.info("Upload a CSV to get started. Required column: **Partner** (name or ID)."); st.stop()
@@ -1676,50 +1690,58 @@ elif page=="Partner List":
 
         # ── Manual add ──
         st.markdown("---")
-        st.markdown("### ➕ Add New Partner")
-        with st.form("pl_add_form"):
-            a1, a2, a3 = st.columns(3)
-            with a1:
-                new_name = st.text_input("Partner name *", key="pla_name", placeholder="e.g. Acme Corp")
-            with a2:
-                new_year = st.text_input("Year became partner", key="pla_year", placeholder="e.g. 2022")
-            with a3:
-                tiers = _tiers(); t_opts = ["Please choose..."] + tiers if tiers else ["Please choose..."]
-                new_tier = st.selectbox("Tier", t_opts, key="pla_tier")
-            a4, a5, a6 = st.columns(3)
-            with a4: new_disc = st.text_input("Partner Discount", key="pla_disc", placeholder="e.g. 20%")
-            with a5: new_city = st.text_input("City", key="pla_city")
-            with a6:
-                new_country = st.selectbox("Country", COUNTRIES, key="pla_country")
-            a7, a8 = st.columns(2)
-            with a7: new_pam = st.text_input("PAM name", key="pla_pam")
+        _at_limit = _max_partners() and _partner_count() >= _max_partners()
+        if _at_limit:
+            st.markdown("### ➕ Add New Partner")
+            st.warning(
+                f"⚠️ You've reached your partner limit of **{_max_partners()}**. "
+                "To add more partners, contact your York Group consultant to upgrade your plan."
+            )
+        else:
+            st.markdown("### ➕ Add New Partner")
+            with st.form("pl_add_form"):
+                a1, a2, a3 = st.columns(3)
+                with a1:
+                    new_name = st.text_input("Partner name *", key="pla_name", placeholder="e.g. Acme Corp")
+                with a2:
+                    new_year = st.text_input("Year became partner", key="pla_year", placeholder="e.g. 2022")
+                with a3:
+                    tiers = _tiers(); t_opts = ["Please choose..."] + tiers if tiers else ["Please choose..."]
+                    new_tier = st.selectbox("Tier", t_opts, key="pla_tier")
+                a4, a5, a6 = st.columns(3)
+                with a4: new_disc = st.text_input("Partner Discount", key="pla_disc", placeholder="e.g. 20%")
+                with a5: new_city = st.text_input("City", key="pla_city")
+                with a6:
+                    new_country = st.selectbox("Country", COUNTRIES, key="pla_country")
+                a7, a8 = st.columns(2)
+                with a7: new_pam = st.text_input("PAM name", key="pla_pam")
 
-            _, add_col = st.columns([3, 1])
-            with add_col:
-                add_sub = st.form_submit_button("➕  Add Partner", use_container_width=True, type="primary")
+                _, add_col = st.columns([3, 1])
+                with add_col:
+                    add_sub = st.form_submit_button("➕  Add Partner", use_container_width=True, type="primary")
 
-        if add_sub:
-            if not new_name or not new_name.strip():
-                st.error("Partner name is required.")
-            elif _partner_exists(new_name):
-                st.error(f"A partner named **{new_name}** already exists.")
-            elif _max_partners() and _partner_count() >= _max_partners():
-                st.error(f"Partner limit reached (**{_max_partners()}**). Contact your admin to increase the limit.")
-            else:
-                row = {"partner_name": new_name.strip(), "partner_year": new_year,
-                       "partner_tier": new_tier if new_tier != "Please choose..." else "",
-                       "partner_discount": new_disc,
-                       "partner_city": new_city, "partner_country": new_country,
-                       "pam_name": new_pam, "pam_email": "",
-                       "total_score": 0, "max_possible": 0, "percentage": 0}
-                for m in em: row[m["key"]] = ""
-                raw = {"partner_name": new_name.strip(), "partner_year": new_year,
-                       "partner_tier": new_tier if new_tier != "Please choose..." else "",
-                       "partner_discount": new_disc,
-                       "partner_city": new_city, "partner_country": new_country,
-                       "pam_name": new_pam, "pam_email": ""}
-                _append_partner(row, raw)
-                st.session_state["_pl_added"] = True; st.rerun()
+            if add_sub:
+                if not new_name or not new_name.strip():
+                    st.error("Partner name is required.")
+                elif _partner_exists(new_name):
+                    st.error(f"A partner named **{new_name}** already exists.")
+                elif _max_partners() and _partner_count() >= _max_partners():
+                    st.error(f"Partner limit reached (**{_max_partners()}**). Contact your admin to increase the limit.")
+                else:
+                    row = {"partner_name": new_name.strip(), "partner_year": new_year,
+                           "partner_tier": new_tier if new_tier != "Please choose..." else "",
+                           "partner_discount": new_disc,
+                           "partner_city": new_city, "partner_country": new_country,
+                           "pam_name": new_pam, "pam_email": "",
+                           "total_score": 0, "max_possible": 0, "percentage": 0}
+                    for m in em: row[m["key"]] = ""
+                    raw = {"partner_name": new_name.strip(), "partner_year": new_year,
+                           "partner_tier": new_tier if new_tier != "Please choose..." else "",
+                           "partner_discount": new_disc,
+                           "partner_city": new_city, "partner_country": new_country,
+                           "pam_name": new_pam, "pam_email": ""}
+                    _append_partner(row, raw)
+                    st.session_state["_pl_added"] = True; st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════
