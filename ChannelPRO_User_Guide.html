@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChannelPRO™ — User Guide</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+      --primary: #c0392b;
+      --primary-dark: #a93226;
+      --primary-light: #f9ebea;
+      --text: #2c3e50;
+      --text-light: #7f8c8d;
+      --bg: #ffffff;
+      --bg-alt: #f8f9fa;
+      --border: #e8eaed;
+      --green: #27ae60;
+      --green-light: #eafaf1;
+      --amber: #f39c12;
+      --amber-light: #fef9e7;
+      --red-light: #fdedec;
+      --blue: #2980b9;
+      --blue-light: #eaf2f8;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+      --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+      --radius: 10px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg-alt);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    /* ──── HEADER ──── */
+    .hero {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #fff;
+      padding: 60px 40px 50px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 2.6em;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .hero .subtitle {
+      font-size: 1.2em;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+    .hero .version {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 4px 16px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 20px;
+      font-size: 0.85em;
+      letter-spacing: 0.5px;
+    }
+
+    /* ──── LAYOUT ──── */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ──── TABLE OF CONTENTS ──── */
+    .toc {
+      background: var(--bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 36px 40px;
+      margin: -30px auto 40px;
+      position: relative;
+      z-index: 1;
+    }
+    .toc h2 {
+      font-size: 1.3em;
+      margin-bottom: 18px;
+      color: var(--primary);
+    }
+    .toc ol {
+      list-style: none;
+      columns: 2;
+      column-gap: 36px;
+      padding: 0;
+    }
+    .toc li {
+      padding: 5px 0;
+      break-inside: avoid;
+    }
+    .toc a {
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .toc a:hover { color: var(--primary); }
+    .toc .num { color: var(--primary); font-weight: 600; margin-right: 6px; }
+
+    /* ──── SECTIONS ──── */
+    section {
+      background: var(--bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 36px 40px;
+      margin-bottom: 28px;
+    }
+    section h2 {
+      font-size: 1.6em;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 6px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--primary-light);
+    }
+    section h2 .badge {
+      display: inline-block;
+      font-size: 0.5em;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 3px 10px;
+      border-radius: 12px;
+      vertical-align: middle;
+      margin-left: 10px;
+      font-weight: 600;
+    }
+    section h3 {
+      font-size: 1.15em;
+      font-weight: 600;
+      margin-top: 28px;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    section p, section li {
+      margin-bottom: 8px;
+    }
+    section ul, section ol {
+      padding-left: 22px;
+    }
+
+    /* ──── TABLES ──── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px;
+      font-size: 0.92em;
+    }
+    thead th {
+      background: var(--bg-alt);
+      font-weight: 600;
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-alt); }
+
+    /* ──── SCORE BADGES ──── */
+    .score-row { display: flex; gap: 6px; margin: 14px 0; }
+    .score-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1em;
+      color: #fff;
+    }
+    .score-1 { background: #e8a0a0; color: #7c2d2d; }
+    .score-2 { background: #f5c98a; color: #7c4a10; }
+    .score-3 { background: #f5e08a; color: #6b5c0d; }
+    .score-4 { background: #a8dda0; color: #2d5a27; }
+    .score-5 { background: #6bc76b; color: #1a4a1a; }
+
+    .score-label {
+      font-size: 0.78em;
+      text-align: center;
+      color: var(--text-light);
+      margin-top: 4px;
+    }
+
+    /* ──── INFO BOXES ──── */
+    .info-box {
+      border-left: 4px solid var(--blue);
+      background: var(--blue-light);
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      font-size: 0.93em;
+    }
+    .info-box.tip {
+      border-color: var(--green);
+      background: var(--green-light);
+    }
+    .info-box.warning {
+      border-color: var(--amber);
+      background: var(--amber-light);
+    }
+    .info-box strong { display: block; margin-bottom: 4px; }
+
+    /* ──── WORKFLOW ARROWS ──── */
+    .workflow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+      margin: 20px 0;
+      justify-content: center;
+    }
+    .workflow .step {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.9em;
+      white-space: nowrap;
+    }
+    .workflow .arrow {
+      color: var(--primary);
+      font-size: 1.4em;
+      padding: 0 6px;
+      font-weight: 700;
+    }
+
+    /* ──── CODE ──── */
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-alt);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.88em;
+      border: 1px solid var(--border);
+    }
+
+    /* ──── FOOTER ──── */
+    .footer {
+      text-align: center;
+      padding: 40px 20px 50px;
+      color: var(--text-light);
+      font-size: 0.9em;
+    }
+    .footer a { color: var(--primary); text-decoration: none; }
+
+    /* ──── GRADE TABLE ──── */
+    .grade-a  { background: #d5f5e3; }
+    .grade-bp { background: #d5f5e3; }
+    .grade-b  { background: #d5f5e3; }
+    .grade-cp { background: #fef9e7; }
+    .grade-c  { background: #fdebd0; }
+    .grade-d  { background: #fdedec; }
+
+    /* ──── QUADRANT CARDS ──── */
+    .quad-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 18px 0;
+    }
+    .quad-card {
+      border-radius: 8px;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+    }
+    .quad-card h4 {
+      font-size: 1em;
+      margin-bottom: 6px;
+    }
+    .quad-card p {
+      font-size: 0.88em;
+      color: var(--text-light);
+      margin-bottom: 0;
+    }
+    .q1 { border-left: 4px solid #e74c3c; background: #fdedec; }
+    .q2 { border-left: 4px solid #27ae60; background: #eafaf1; }
+    .q3 { border-left: 4px solid #f39c12; background: #fef9e7; }
+    .q4 { border-left: 4px solid #95a5a6; background: #f4f6f6; }
+
+    /* ──── PRINT ──── */
+    @media print {
+      body { background: #fff; font-size: 12px; }
+      .hero { padding: 30px 20px; }
+      section { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
+      .toc { box-shadow: none; border: 1px solid #ddd; }
+      .toc ol { columns: 1; }
+    }
+
+    @media (max-width: 700px) {
+      .hero h1 { font-size: 1.8em; }
+      section { padding: 24px 20px; }
+      .toc ol { columns: 1; }
+      .quad-grid { grid-template-columns: 1fr; }
+      .workflow .step { font-size: 0.8em; padding: 8px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════════ HERO ════════════ -->
+<div class="hero">
+  <h1>ChannelPRO&#8482;</h1>
+  <div class="subtitle">Partner Revenue Optimizer &mdash; User Guide</div>
+  <div class="version">Version 4 &middot; Multi-Tenant</div>
+</div>
+
+<!-- ════════════ TABLE OF CONTENTS ════════════ -->
+<div class="container">
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><span class="num">1.</span> <a href="#getting-started">Getting Started</a></li>
+    <li><span class="num">2.</span> <a href="#client-intake">Client Intake</a></li>
+    <li><span class="num">3.</span> <a href="#scoring-criteria">Step 1 &mdash; Scoring Criteria</a></li>
+    <li><span class="num">4.</span> <a href="#score-partner">Step 2 &mdash; Score a Partner</a></li>
+    <li><span class="num">5.</span> <a href="#assessment">Step 3 &mdash; Partner Assessment</a></li>
+    <li><span class="num">6.</span> <a href="#classification">Step 4 &mdash; Partner Classification</a></li>
+    <li><span class="num">7.</span> <a href="#import-data">Import Data</a></li>
+    <li><span class="num">8.</span> <a href="#partner-list">Partner List</a></li>
+    <li><span class="num">9.</span> <a href="#ai-assistant">Ask ChannelPRO&#8482; (AI)</a></li>
+    <li><span class="num">10.</span> <a href="#program-costs">Break-even &mdash; Program Costs</a></li>
+    <li><span class="num">11.</span> <a href="#detailed-analysis">Break-even &mdash; Detailed Analysis</a></li>
+    <li><span class="num">12.</span> <a href="#revenue-recovery">Revenue Recovery</a></li>
+    <li><span class="num">13.</span> <a href="#administration">Administration</a></li>
+    <li><span class="num">14.</span> <a href="#scoring-reference">Scoring Reference</a></li>
+    <li><span class="num">15.</span> <a href="#faq">FAQ &amp; Troubleshooting</a></li>
+  </ol>
+</div>
+
+<!-- ════════════ 1. GETTING STARTED ════════════ -->
+<section id="getting-started">
+  <h2>1. Getting Started</h2>
+
+  <h3>User Roles</h3>
+  <table>
+    <thead><tr><th>Role</th><th>Access</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Admin</strong></td><td>All pages, all clients, user management, tenant switching</td></tr>
+      <tr><td><strong>Client</strong></td><td>All scoring &amp; analysis pages scoped to their assigned tenant</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Recommended Workflow</h3>
+  <p>Follow these steps in order for the best experience:</p>
+  <div class="workflow">
+    <span class="step">Client Intake</span><span class="arrow">&rarr;</span>
+    <span class="step">Step 1: Criteria</span><span class="arrow">&rarr;</span>
+    <span class="step">Step 2: Score</span><span class="arrow">&rarr;</span>
+    <span class="step">Step 3: Assess</span><span class="arrow">&rarr;</span>
+    <span class="step">Step 4: Classify</span>
+  </div>
+  <p>You can also bulk-import partner data via <strong>Import Data</strong> at any point after Step 1.</p>
+
+  <h3>Sidebar Navigation</h3>
+  <p>The sidebar contains:</p>
+  <ul>
+    <li><strong>Logo &amp; branding</strong> at the top</li>
+    <li><strong>Your name and role</strong> badge</li>
+    <li><strong>Active Client</strong> selector (admin only &mdash; switch between tenants)</li>
+    <li><strong>Page navigation</strong> radio buttons</li>
+    <li><strong>Category filter</strong> (filters visible metrics on Steps 1 &amp; 2)</li>
+    <li><strong>Partners Scored</strong> section showing a clickable partner list with grades</li>
+    <li><strong>Sign Out</strong> button</li>
+  </ul>
+</section>
+
+<!-- ════════════ 2. CLIENT INTAKE ════════════ -->
+<section id="client-intake">
+  <h2>2. Client Intake</h2>
+  <p>Capture your company profile so ChannelPRO&#8482; can personalize the scoring experience.</p>
+
+  <h3>Contact Information</h3>
+  <ul>
+    <li>Client company name, website URL, phone</li>
+    <li>Primary project manager name and email</li>
+    <li>City and country</li>
+    <li>Company logo URL (optional &mdash; displayed in the header)</li>
+  </ul>
+
+  <h3>Business Profile</h3>
+  <ul>
+    <li>Company size (employee count range)</li>
+    <li>Industry verticals served (select all that apply)</li>
+    <li>Solution delivery model (On-premise, SaaS/PaaS, IaaS/VM, Device)</li>
+  </ul>
+
+  <h3>Target Customers</h3>
+  <ul>
+    <li>Target company size range</li>
+    <li>Average first-year transaction value</li>
+  </ul>
+
+  <h3>Channel Information</h3>
+  <ul>
+    <li>Services as a percentage of license/subscription revenue</li>
+    <li>Number of resellers / channel partners</li>
+    <li>Percentage of revenues from indirect channels</li>
+    <li>Discount tiers offered to partners</li>
+    <li>Partner designations (e.g., <code>Gold, Silver, Bronze</code>) &mdash; these become the <strong>Tier</strong> options in Step 2</li>
+  </ul>
+
+  <div class="info-box tip">
+    <strong>Saving</strong>
+    Click <strong>Next &rarr; Step 1</strong> to save and proceed, or revisit this page later to update.
+  </div>
+</section>
+
+<!-- ════════════ 3. SCORING CRITERIA ════════════ -->
+<section id="scoring-criteria">
+  <h2>3. Step 1 &mdash; Scoring Criteria <span class="badge">STEP 1</span></h2>
+  <p>Define how partner performance is measured. Configure the 1&ndash;5 scoring thresholds for each of the 29 metrics.</p>
+
+  <h3>The 29 Metrics</h3>
+  <p>Metrics are organized into six categories:</p>
+  <table>
+    <thead><tr><th>Category</th><th>Metrics</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Revenue &amp; Growth</strong></td><td>Annual revenues, YoY growth, Net-new logo revenues, % SaaS, Net expansion, Total revenues</td></tr>
+      <tr><td><strong>Sales Performance</strong></td><td>Deal size (new &amp; renewals), Time to close, Registered deals, Win/loss ratio, Partner opps %, Frequency</td></tr>
+      <tr><td><strong>Retention &amp; Satisfaction</strong></td><td>Renewal rate, Customer satisfaction, Communication with vendor</td></tr>
+      <tr><td><strong>Enablement &amp; Support</strong></td><td>MDF utilization, Sales org quality, Certifications, Sales support calls, Tech support calls</td></tr>
+      <tr><td><strong>Strategic Fit</strong></td><td>Dedication vs competitors, Dedication vs other vendors, Geo coverage, Vertical coverage</td></tr>
+      <tr><td><strong>Risk &amp; Governance</strong></td><td>Management quality, Known litigation, Export control &amp; IP, Financial strength</td></tr>
+    </tbody>
+  </table>
+  <p>Use the <strong>category filter</strong> in the sidebar to focus on one group at a time.</p>
+
+  <h3>Metric Types</h3>
+  <ul>
+    <li><strong>Quantitative (18 metrics)</strong> &mdash; Scored by numeric ranges. Enter the Min and Max values for each score level (1&ndash;5). Example: Annual revenues of $0&ndash;$50K = score 1, $750K+ = score 5.</li>
+    <li><strong>Qualitative (11 metrics)</strong> &mdash; Scored by descriptive text. Edit the descriptor for each level. Example: Communication score 1 = &ldquo;Unresponsive &mdash; hard to reach&rdquo;, score 5 = &ldquo;Exemplary &mdash; weekly touchpoints, exec visits&rdquo;.</li>
+  </ul>
+
+  <h3>Enabling / Disabling Metrics</h3>
+  <p>Each metric has an <strong>Include in scoring</strong> checkbox. Uncheck it to exclude a metric from all partner scorecards. Disabled metrics appear greyed out with an &ldquo;EXCLUDED&rdquo; badge.</p>
+
+  <h3>Auto-Calculate from Partner Data</h3>
+  <p>If you have already imported partner data, an <strong>Auto-Calculate</strong> section appears at the bottom:</p>
+  <ol>
+    <li>Click <strong>Recalculate Benchmarks</strong></li>
+    <li>ChannelPRO&#8482; analyzes all partner raw values using quintile analysis</li>
+    <li>Scoring ranges are automatically adjusted to reflect your actual partner distribution</li>
+    <li>All partners are re-scored with the new ranges</li>
+  </ol>
+
+  <h3>Saving</h3>
+  <ul>
+    <li><strong>Save Criteria</strong> &mdash; saves your changes</li>
+    <li><strong>Next &rarr; Step 2</strong> &mdash; saves and navigates forward</li>
+  </ul>
+
+  <div class="info-box warning">
+    <strong>Note</strong>
+    All changes apply retroactively &mdash; existing partners are immediately re-scored when you save.
+  </div>
+</section>
+
+<!-- ════════════ 4. SCORE A PARTNER ════════════ -->
+<section id="score-partner">
+  <h2>4. Step 2 &mdash; Score a Partner <span class="badge">STEP 2</span></h2>
+  <p>Enter partner details and score each metric. Scores are calculated in real time as you fill in values.</p>
+
+  <h3>Partner Details</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Partner name</td><td>Required. Must be unique.</td></tr>
+      <tr><td>Year</td><td>Year the partnership began</td></tr>
+      <tr><td>Tier</td><td>Dropdown populated from Client Intake tiers</td></tr>
+      <tr><td>Partner Discount</td><td>e.g., &ldquo;20%&rdquo;</td></tr>
+      <tr><td>City / Country</td><td>Partner location</td></tr>
+      <tr><td>PAM Name / Email</td><td>Partner Account Manager contact</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Scoring Metrics</h3>
+  <ul>
+    <li><strong>Quantitative metrics</strong> &mdash; Enter a numeric value (e.g., <code>250000</code> for revenue). The score (1&ndash;5) is calculated automatically based on your Step 1 ranges and displayed as a colored badge.</li>
+    <li><strong>Qualitative metrics</strong> &mdash; Select a descriptor from the dropdown. The corresponding score appears on the right.</li>
+  </ul>
+  <p>Hint rows below each metric show the scoring ranges for quick reference.</p>
+
+  <h3>Live Summary</h3>
+  <p>Four summary cards update in real time as you score:</p>
+  <table>
+    <thead><tr><th>Card</th><th>Shows</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Total</strong></td><td>Sum of all metric scores</td></tr>
+      <tr><td><strong>Scored</strong></td><td>How many metrics have been scored</td></tr>
+      <tr><td><strong>Score %</strong></td><td>Total as a percentage of max possible</td></tr>
+      <tr><td><strong>Grade</strong></td><td>Letter grade (A through D)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Submitting</h3>
+  <ul>
+    <li><strong>New partner:</strong> Click <strong>Submit &amp; Start New Partner</strong>. The form clears for the next partner.</li>
+    <li><strong>Editing:</strong> When you open an existing partner (from Step 3, Partner List, or the sidebar), the form loads their data. Click <strong>Save Changes</strong> to update, or <strong>Cancel Edit</strong> to discard.</li>
+  </ul>
+</section>
+
+<!-- ════════════ 5. PARTNER ASSESSMENT ════════════ -->
+<section id="assessment">
+  <h2>5. Step 3 &mdash; Partner Assessment <span class="badge">STEP 3</span></h2>
+  <p>View all scored partners in an interactive heatmap table. Filter, sort, compare, and export.</p>
+
+  <h3>The Assessment Table</h3>
+  <p>The table displays every partner with their metric scores in a color-coded grid:</p>
+
+  <div class="score-row">
+    <div style="text-align:center">
+      <div class="score-badge score-1">1</div>
+      <div class="score-label">Poor</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-2">2</div>
+      <div class="score-label">Below Avg</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-3">3</div>
+      <div class="score-label">Average</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-4">4</div>
+      <div class="score-label">Good</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-5">5</div>
+      <div class="score-label">Excellent</div>
+    </div>
+  </div>
+
+  <h3>Key Features</h3>
+  <ul>
+    <li><strong>Column groups</strong> &mdash; Metrics are grouped under their category headers</li>
+    <li><strong>Pinned columns</strong> &mdash; Partner name stays on the left; Total, Score %, and Grade stay on the right</li>
+    <li><strong>Sorting</strong> &mdash; Click any column header to sort ascending/descending</li>
+    <li><strong>Filtering</strong> &mdash; Use the filter row below headers to type-to-filter or use dropdown filters</li>
+    <li><strong>Row selection</strong> &mdash; Click a row to select a partner, then click <strong>Open Scorecard</strong> to edit</li>
+  </ul>
+
+  <h3>Downloads</h3>
+  <table>
+    <thead><tr><th>Button</th><th>Format</th></tr></thead>
+    <tbody>
+      <tr><td>Download Excel</td><td><code>.xlsx</code> with colored heatmap cells</td></tr>
+      <tr><td>Download CSV</td><td>Plain <code>.csv</code> for use in other tools</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ════════════ 6. PARTNER CLASSIFICATION ════════════ -->
+<section id="classification">
+  <h2>6. Step 4 &mdash; Partner Classification <span class="badge">STEP 4</span></h2>
+  <p>Classify partners into strategic quadrants based on configurable criteria.</p>
+
+  <h3>The Four Quadrants</h3>
+  <div class="quad-grid">
+    <div class="quad-card q1">
+      <h4>Q1 &mdash; Strategic / Underperforming</h4>
+      <p>High total revenue, low vendor revenue &amp; growth</p>
+    </div>
+    <div class="quad-card q2">
+      <h4>Q2 &mdash; Top Performers</h4>
+      <p>High revenue, high growth, high new logos</p>
+    </div>
+    <div class="quad-card q3">
+      <h4>Q3 &mdash; Growth Potential</h4>
+      <p>High revenue, low growth, mid new logos</p>
+    </div>
+    <div class="quad-card q4">
+      <h4>Q4 &mdash; Long Tail</h4>
+      <p>Does not match Q1&ndash;Q3 (auto-assigned)</p>
+    </div>
+  </div>
+
+  <h3>Configuring Criteria</h3>
+  <p>For Q1, Q2, and Q3, you can set up to <strong>6 criteria</strong> each. Each criterion is a metric + level combination:</p>
+  <table>
+    <thead><tr><th>Level</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><strong>High</strong></td><td>Score of 4 or 5</td></tr>
+      <tr><td><strong>Mid</strong></td><td>Score of exactly 3</td></tr>
+      <tr><td><strong>Low</strong></td><td>Score of 1 or 2</td></tr>
+      <tr><td><strong>Any</strong></td><td>Any score above 0</td></tr>
+    </tbody>
+  </table>
+
+  <div class="info-box">
+    <strong>First match wins</strong>
+    Partners are tested against Q1 first, then Q2, then Q3. The first quadrant whose criteria are all satisfied claims the partner. Unmatched partners go to Q4.
+  </div>
+
+  <p>Click <strong>Save &amp; Classify</strong> to apply. Results show quadrant summary cards and a full classification table.</p>
+
+  <h3>Downloads</h3>
+  <table>
+    <thead><tr><th>Button</th><th>Format</th></tr></thead>
+    <tbody>
+      <tr><td>Download Excel</td><td><code>.xlsx</code> with quadrant-colored rows</td></tr>
+      <tr><td>Download CSV</td><td>Plain <code>.csv</code></td></tr>
+      <tr><td>Download JSON</td><td>Raw <code>{partner: quadrant}</code> mapping</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ════════════ 7. IMPORT DATA ════════════ -->
+<section id="import-data">
+  <h2>7. Import Data</h2>
+  <p>Bulk-import partners from a CSV file exported from your CRM, ERP, or PRM system.</p>
+
+  <h3>Step-by-Step</h3>
+  <ol>
+    <li><strong>Upload your CSV</strong> &mdash; Click the file uploader and select a <code>.csv</code> file. A preview of the first 5 rows appears.</li>
+    <li><strong>Map the Partner Name column</strong> &mdash; Select which CSV column contains the partner/company name. This field is required.</li>
+    <li><strong>Map Partner Details</strong> &mdash; Map optional columns like Year, Tier, Discount, City, Country, PAM Name, and PAM Email. ChannelPRO&#8482; auto-matches common column names.</li>
+    <li><strong>Map Scoring Metrics</strong> &mdash; For each enabled metric, select the corresponding CSV column. Auto-matching finds likely matches.</li>
+    <li><strong>Review the mapping summary</strong> &mdash; Warning banners highlight any unmapped fields.</li>
+    <li><strong>Click Import Partners</strong> &mdash; A progress bar shows the import status.</li>
+  </ol>
+
+  <h3>How Matching Works</h3>
+  <ul>
+    <li><strong>Quantitative metrics:</strong> Raw values from CSV are automatically scored using your Step 1 ranges.</li>
+    <li><strong>Qualitative metrics:</strong> Values must match one of your Step 1 descriptors exactly to auto-score.</li>
+    <li><strong>Existing partners:</strong> If the partner name already exists, the partner is <strong>updated</strong>. New names are <strong>created</strong>.</li>
+  </ul>
+
+  <h3>After Import</h3>
+  <ul>
+    <li>A results panel shows Created / Updated / Error counts</li>
+    <li>An imported data preview table shows each partner with their raw values and computed scores</li>
+    <li>Expand <strong>Recalculate Scoring Benchmarks</strong> to auto-adjust your Step 1 ranges</li>
+  </ul>
+</section>
+
+<!-- ════════════ 8. PARTNER LIST ════════════ -->
+<section id="partner-list">
+  <h2>8. Partner List</h2>
+  <p>Quick-access view of all partners with inline editing and manual partner creation.</p>
+
+  <h3>Viewing Partners</h3>
+  <p>A summary table shows: Partner, Tier, PAM, City, Total Score, Percentage, and Grade. Partners are sorted by total score (highest first).</p>
+
+  <h3>Editing a Partner</h3>
+  <ol>
+    <li>Select a partner from the dropdown</li>
+    <li>Click <strong>Edit Scorecard</strong></li>
+    <li>Update details or metric scores in the inline form</li>
+    <li>Click <strong>Save Changes</strong></li>
+  </ol>
+
+  <h3>Adding a Partner Manually</h3>
+  <ol>
+    <li>Expand <strong>Add New Partner</strong></li>
+    <li>Fill in the partner name (required) and optional details</li>
+    <li>Click <strong>Add Partner</strong></li>
+    <li>The partner is created with blank metric scores &mdash; go to Step 2 to score them</li>
+  </ol>
+
+  <h3>Deleting a Partner</h3>
+  <p>Select a partner and click <strong>Delete Partner</strong>. A confirmation dialog appears.</p>
+  <div class="info-box tip">
+    <strong>Tip</strong>
+    You can also delete partners from the sidebar&rsquo;s <strong>Partners Scored</strong> section using the trash icon next to each name.
+  </div>
+</section>
+
+<!-- ════════════ 9. ASK CHANNELPRO (AI) ════════════ -->
+<section id="ai-assistant">
+  <h2>9. Ask ChannelPRO&#8482; (AI Assistant)</h2>
+  <p>Ask natural-language questions about your partner data. Powered by Anthropic&rsquo;s Claude AI.</p>
+
+  <h3>Requirements</h3>
+  <p>An <strong>Anthropic API key</strong> is required. Set it in one of two ways:</p>
+  <ul>
+    <li><strong>Recommended:</strong> Set <code>ANTHROPIC_API_KEY</code> in your Render environment variables</li>
+    <li><strong>Fallback:</strong> Paste it into the text field that appears on the page</li>
+  </ul>
+
+  <h3>What You Can Ask</h3>
+  <table>
+    <thead><tr><th>Type</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>Filtering &amp; search</td><td>&ldquo;Which partners have MDF utilization below 40%?&rdquo;</td></tr>
+      <tr><td>Multi-criteria analysis</td><td>&ldquo;Show me partners with both a low close rate and long sales cycle&rdquo;</td></tr>
+      <tr><td>Comparison</td><td>&ldquo;Compare the top 5 partners by revenue vs their customer satisfaction&rdquo;</td></tr>
+      <tr><td>Score updates</td><td>&ldquo;Set Partner X&rsquo;s renewal rate score to 4&rdquo;</td></tr>
+      <tr><td>Recommendations</td><td>&ldquo;Which partners should we invest more in?&rdquo;</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Response Types</h3>
+  <p>The AI can respond with:</p>
+  <ul>
+    <li><strong>Text answers</strong> &mdash; analysis, recommendations, explanations</li>
+    <li><strong>Data tables</strong> &mdash; filtered/sorted partner data</li>
+    <li><strong>Charts</strong> &mdash; bar charts, pie charts, horizontal bar charts</li>
+    <li><strong>Score updates</strong> &mdash; proposed changes with a confirmation dialog</li>
+  </ul>
+
+  <div class="info-box">
+    <strong>Confirming Score Updates</strong>
+    When the AI suggests score changes, a confirmation panel appears showing each proposed change. Click <strong>Apply Updates</strong> to save or <strong>Cancel</strong> to discard.
+  </div>
+
+  <p>The chat is <strong>multi-turn</strong> &mdash; ask follow-up questions to refine results. Click <strong>Clear chat</strong> to start a fresh conversation.</p>
+</section>
+
+<!-- ════════════ 10. BREAK-EVEN — PROGRAM COSTS ════════════ -->
+<section id="program-costs">
+  <h2>10. Break-even &mdash; Program Costs</h2>
+  <p>Calculate your total partner program costs and the break-even cost per partner.</p>
+
+  <h3>Entering Costs</h3>
+  <p>Costs are organized into predefined sections:</p>
+  <table>
+    <thead><tr><th>Section</th><th>Example Items</th></tr></thead>
+    <tbody>
+      <tr><td>Personnel and Overhead</td><td>Partner manager salaries, social charges, office</td></tr>
+      <tr><td>Infrastructure and Technology</td><td>PRM software, integrations, security</td></tr>
+      <tr><td>Marketing and Promotion</td><td>Co-marketing, MDF, SEO, events</td></tr>
+      <tr><td>Technical and Sales Support</td><td>Technical support, pre-sales, social charges</td></tr>
+      <tr><td>Training and Certification</td><td>Product training, sales training, cert programs</td></tr>
+      <tr><td>Legal and Compliance</td><td>Contracts, compliance, dispute resolution</td></tr>
+      <tr><td>Travel and Meetings</td><td>Face-to-face meetings, joint sales calls</td></tr>
+      <tr><td>Performance Metrics &amp; Reporting</td><td>Performance tools, reporting</td></tr>
+      <tr><td>Scaling and Expansion</td><td>Recruitment, onboarding, marketing</td></tr>
+    </tbody>
+  </table>
+  <p>Enter the annual dollar amount for each cost item. You can also <strong>add custom cost categories</strong> using the expander at the top.</p>
+
+  <h3>Program Parameters</h3>
+  <table>
+    <thead><tr><th>Parameter</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Number of partners</td><td>Used to calculate break-even per partner</td></tr>
+      <tr><td>Support calls (annual)</td><td>Total inbound support calls across all partners</td></tr>
+      <tr><td>Avg minutes per call</td><td>Average duration for cost-per-minute calculation</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Results Dashboard</h3>
+  <p>After saving, a summary dashboard shows:</p>
+  <ul>
+    <li><strong>Total Program Costs</strong> &mdash; sum of all cost items</li>
+    <li><strong>Break-even per Partner</strong> &mdash; total costs divided by number of partners</li>
+    <li><strong>Support Cost Metrics</strong> &mdash; cost per call and cost per minute</li>
+  </ul>
+  <p>A breakdown table shows each cost section&rsquo;s dollar amount and percentage of total.</p>
+</section>
+
+<!-- ════════════ 11. BREAK-EVEN — DETAILED ANALYSIS ════════════ -->
+<section id="detailed-analysis">
+  <h2>11. Break-even &mdash; Detailed Analysis</h2>
+  <p>Upload per-partner cost data (revenue, support calls) for granular cost-vs-revenue analysis.</p>
+
+  <h3>CSV Requirements</h3>
+  <table>
+    <thead><tr><th>Column</th><th>Required</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>Partner</td><td>Yes</td><td>Partner company name</td></tr>
+      <tr><td>Revenues</td><td>Yes</td><td>Annual revenue from this partner</td></tr>
+      <tr><td># of calls</td><td>Yes</td><td>Number of support calls received</td></tr>
+      <tr><td>Time spent</td><td>No</td><td>Total minutes spent on support</td></tr>
+    </tbody>
+  </table>
+  <p>If <strong>Time spent</strong> is missing, ChannelPRO&#8482; estimates it using: <code>calls &times; avg minutes per call</code>.</p>
+
+  <h3>Analysis Output</h3>
+  <p><strong>Metrics row:</strong> Cost per minute, cost per call, average minutes per call.</p>
+  <p><strong>Partner cost table</strong> with: Partner name, Revenues, % of total revenues, Number of calls, % of total calls, Time spent, % of total support time, Support cost, % of total cost.</p>
+
+  <h3>Visualizations (three tabs)</h3>
+  <ol>
+    <li><strong>Support Cost vs Revenue</strong> &mdash; grouped bar chart (top 15 partners)</li>
+    <li><strong>Cost Distribution</strong> &mdash; donut charts showing support cost and revenue distribution</li>
+    <li><strong>Cost / Revenue Ratio</strong> &mdash; color-coded bar chart identifying partners whose support costs are disproportionately high</li>
+  </ol>
+
+  <p>Export the full analysis as CSV or formatted Excel.</p>
+</section>
+
+<!-- ════════════ 12. REVENUE RECOVERY ════════════ -->
+<section id="revenue-recovery">
+  <h2>12. Revenue Recovery</h2>
+  <p>Identify non-performing &ldquo;Long Tail&rdquo; partners and calculate how much margin you could recapture by adjusting their discount rates.</p>
+
+  <h3>How It Works</h3>
+  <ol>
+    <li>Set a <strong>Net-New Logo Revenue threshold</strong> (default: $50,000). Partners with net-new revenue below this threshold are flagged as non-performing.</li>
+    <li>Set a <strong>Proposed baseline margin</strong> (default: 10%). This is the reduced margin rate applied to non-performing partners.</li>
+    <li>ChannelPRO&#8482; compares each flagged partner&rsquo;s current margin cost against the proposed margin cost and calculates the <strong>recapture opportunity</strong>.</li>
+  </ol>
+
+  <h3>Reading the Results</h3>
+  <p><strong>Summary cards</strong> show:</p>
+  <ul>
+    <li>Number of non-performing partners</li>
+    <li>Current total margin cost for those partners</li>
+    <li>Proposed total margin cost at the baseline rate</li>
+    <li><strong>Total potential recapture</strong> &mdash; the savings opportunity</li>
+  </ul>
+
+  <p><strong>Detail table</strong> lists every flagged partner with: Annual revenue, current margin %, current margin cost, proposed margin % and cost, recapture amount, and net-new logo revenue.</p>
+
+  <p>Click <strong>Download Report (CSV)</strong> to export the full detail table.</p>
+</section>
+
+<!-- ════════════ 13. ADMINISTRATION ════════════ -->
+<section id="administration">
+  <h2>13. Administration</h2>
+
+  <h3>Manage Users</h3>
+  <p>The <strong>Admin &mdash; Manage Users</strong> page lets you:</p>
+  <ul>
+    <li><strong>View all users</strong> with their roles and tenant assignments</li>
+    <li><strong>Change passwords</strong> for any user</li>
+    <li><strong>Delete users</strong> (except the default admin)</li>
+    <li><strong>Create new users</strong> &mdash; specify username, display name, password, role, and tenant ID</li>
+    <li><strong>Set partner limits</strong> per tenant (e.g., max 50 partners for a trial; 0 = unlimited)</li>
+  </ul>
+
+  <h3>All Clients Overview</h3>
+  <p>The <strong>Admin &mdash; All Clients</strong> page provides a bird&rsquo;s-eye view:</p>
+  <ul>
+    <li><strong>Summary dashboard</strong> &mdash; total clients, total partners, criteria completion rate</li>
+    <li><strong>Break-even overview</strong> &mdash; aggregated program costs across all clients</li>
+    <li><strong>Per-client detail</strong> &mdash; expandable cards showing contact info, partner table, break-even metrics, and individual CSV download</li>
+    <li><strong>Cross-client Excel export</strong> &mdash; one workbook with a sheet per client</li>
+  </ul>
+  <p>The currently active client is highlighted with an <strong>ACTIVE</strong> badge.</p>
+
+  <h3>Switching Clients</h3>
+  <p>Admins can switch between clients using the <strong>Active Client</strong> dropdown in the sidebar. Switching clients reloads all data for the selected tenant.</p>
+</section>
+
+<!-- ════════════ 14. SCORING REFERENCE ════════════ -->
+<section id="scoring-reference">
+  <h2>14. Scoring Reference</h2>
+
+  <h3>Grade Scale</h3>
+  <table>
+    <thead><tr><th>Grade</th><th>Score %</th><th>Color</th></tr></thead>
+    <tbody>
+      <tr class="grade-a"><td><strong>A</strong></td><td>90 &ndash; 100%</td><td>Green</td></tr>
+      <tr class="grade-bp"><td><strong>B+</strong></td><td>80 &ndash; 89%</td><td>Green</td></tr>
+      <tr class="grade-b"><td><strong>B</strong></td><td>70 &ndash; 79%</td><td>Green</td></tr>
+      <tr class="grade-cp"><td><strong>C+</strong></td><td>60 &ndash; 69%</td><td>Gold</td></tr>
+      <tr class="grade-c"><td><strong>C</strong></td><td>50 &ndash; 59%</td><td>Orange</td></tr>
+      <tr class="grade-d"><td><strong>D</strong></td><td>0 &ndash; 49%</td><td>Red</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Score Colors (Assessment Table)</h3>
+  <div class="score-row">
+    <div style="text-align:center">
+      <div class="score-badge score-1">1</div>
+      <div class="score-label">Critical</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-2">2</div>
+      <div class="score-label">Below Avg</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-3">3</div>
+      <div class="score-label">Average</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-4">4</div>
+      <div class="score-label">Good</div>
+    </div>
+    <div style="text-align:center">
+      <div class="score-badge score-5">5</div>
+      <div class="score-label">Excellent</div>
+    </div>
+  </div>
+
+  <h3>Classification Levels</h3>
+  <table>
+    <thead><tr><th>Level</th><th>Score Range</th><th>Used In</th></tr></thead>
+    <tbody>
+      <tr><td><strong>High</strong></td><td>4 or 5</td><td>Q1&ndash;Q3 criteria</td></tr>
+      <tr><td><strong>Mid</strong></td><td>3</td><td>Q1&ndash;Q3 criteria</td></tr>
+      <tr><td><strong>Low</strong></td><td>1 or 2</td><td>Q1&ndash;Q3 criteria</td></tr>
+      <tr><td><strong>Any</strong></td><td>1&ndash;5</td><td>Q1&ndash;Q3 criteria</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ════════════ 15. FAQ ════════════ -->
+<section id="faq">
+  <h2>15. FAQ &amp; Troubleshooting</h2>
+
+  <h3>I changed the scoring criteria but my partners still have old scores.</h3>
+  <p>Scores update automatically when you save criteria. If something looks off, go to Step 1 and click <strong>Save Criteria</strong> again &mdash; all partners will be re-scored.</p>
+
+  <h3>How do I delete all partners and start fresh?</h3>
+  <p>In the sidebar, expand <strong>Partners Scored</strong>, scroll to the bottom, and click <strong>Delete All Partners</strong>. Confirm when prompted.</p>
+
+  <h3>Can I import data from Excel?</h3>
+  <p>Save your Excel file as CSV first (File &rarr; Save As &rarr; CSV), then use <strong>Import Data</strong>.</p>
+
+  <h3>The AI assistant asks for an API key.</h3>
+  <p>Set the <code>ANTHROPIC_API_KEY</code> environment variable in your Render dashboard, then redeploy the service. Alternatively, paste the key directly into the text field for the current session.</p>
+
+  <h3>What happens if I import a partner that already exists?</h3>
+  <p>The existing partner is <strong>updated</strong> with the new data. Existing scores for unmapped metrics are preserved.</p>
+
+  <h3>How is the break-even per partner calculated?</h3>
+  <p>Total Program Costs (from all cost sections) divided by the Number of Partners you entered.</p>
+
+  <h3>Can two partners have the same name?</h3>
+  <p>No. Partner names must be unique. The import process uses the name as the matching key for updates.</p>
+
+  <h3>What does &ldquo;Long Tail&rdquo; mean in classification?</h3>
+  <p>Partners that don&rsquo;t match any of the Q1&ndash;Q3 criteria are automatically placed in Q4 (Long Tail). These are typically partners with lower scores across the board.</p>
+</section>
+
+<!-- ════════════ FOOTER ════════════ -->
+<div class="footer">
+  <p><strong>ChannelPRO&#8482;</strong> is a product of York Group.</p>
+  <p>For support, contact your account representative.</p>
+</div>
+
+</div><!-- /.container -->
+</body>
+</html>
